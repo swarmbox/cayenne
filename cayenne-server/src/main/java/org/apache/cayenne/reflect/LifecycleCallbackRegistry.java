@@ -20,6 +20,7 @@ package org.apache.cayenne.reflect;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -192,11 +193,22 @@ public class LifecycleCallbackRegistry {
                         Class<? extends Annotation>[] entityAnnotations = reader.entityAnnotations(a);
 
                         for (Class<?> type : entities) {
-                            // TODO: ignoring entity subclasses? whenever we add
-                            // those,
-                            // take
-                            // into account "exlcudeSuperclassListeners" flag
-                            types.add(type);
+                            // TODO: ignoring entity subclasses? whenever we add those,
+                            // take into account "excludeSuperclassListeners" flag
+
+                            // If type is an interface register all entities that implement it
+                            if (type.isInterface()) {
+                                for (ObjEntity entity : this.entityResolver.getObjEntities()) {
+                                    if (type.isAssignableFrom(entity.getJavaClass()) && !entity.isAbstract()) {
+                                        types.add(entity.getJavaClass());
+                                    }
+                                }
+                            } else {
+                                if (!Modifier.isAbstract(type.getModifiers())) {
+                                    types.add(type);
+                                }
+                            }
+
                         }
 
                         for (Class<? extends Annotation> type : entityAnnotations) {
