@@ -25,7 +25,6 @@ import org.apache.cayenne.map.CallbackMap;
 import org.apache.cayenne.modeler.ProjectController;
 import org.apache.cayenne.modeler.event.EntityDisplayEvent;
 import org.apache.cayenne.modeler.event.ObjEntityDisplayListener;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 
 
 /**
@@ -77,11 +76,6 @@ public class ObjEntityCallbackMethodsTab extends AbstractCallbackMethodsTab  {
             return mediator.getCurrentObjEntity().getCallbackMap();
         }
         return null;
-    }
-
-    @Override
-    protected void initTablePreferences() {
-        tablePreferences = new TableColumnPreferences(this.getClass(),"objEntity/callbackTable");
     }
 }
 

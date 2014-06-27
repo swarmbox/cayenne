@@ -20,13 +20,14 @@
 package org.apache.cayenne.map;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.SortedMap;
 import java.util.StringTokenizer;
-import java.util.TreeMap;
 
 import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.exp.Expression;
@@ -55,8 +56,8 @@ public abstract class Entity implements CayenneMapEntry, XMLSerializable, Serial
     protected String name;
     protected DataMap dataMap;
 
-    protected SortedMap<String, Attribute> attributes;
-    protected SortedMap<String, Relationship> relationships;
+    protected Map<String, Attribute> attributes;
+    protected Map<String, Relationship> relationships;
 
     /**
      * Creates an unnamed Entity.
@@ -69,8 +70,8 @@ public abstract class Entity implements CayenneMapEntry, XMLSerializable, Serial
      * Creates a named Entity.
      */
     public Entity(String name) {
-        attributes = new TreeMap<String, Attribute>();
-        relationships = new TreeMap<String, Relationship>();
+        attributes = new LinkedHashMap<String, Attribute>();
+        relationships = new LinkedHashMap<String, Relationship>();
 
         setName(name);
     }
@@ -159,6 +160,42 @@ public abstract class Entity implements CayenneMapEntry, XMLSerializable, Serial
         attribute.setEntity(this);
     }
 
+    public void moveAttribute(int fromIndex, int toIndex) {
+        List<String> keys = new ArrayList<String>(this.attributes.keySet());
+        List<Attribute> values = new ArrayList<Attribute>(this.attributes.values());
+
+        String key = keys.remove(fromIndex);
+        Attribute value = values.remove(fromIndex);
+
+        keys.add(toIndex, key);
+        values.add(toIndex, value);
+
+        Map<String, Attribute> attributes = new LinkedHashMap<String, Attribute>();
+        for (int i = 0, s = keys.size(); i < s; i++) {
+            attributes.put(keys.get(i), values.get(i));
+        }
+
+        this.attributes = attributes;
+    }
+
+    public void moveRelationship(int fromIndex, int toIndex) {
+        List<String> keys = new ArrayList<String>(this.relationships.keySet());
+        List<Relationship> values = new ArrayList<Relationship>(this.relationships.values());
+
+        String key = keys.remove(fromIndex);
+        Relationship value = values.remove(fromIndex);
+
+        keys.add(toIndex, key);
+        values.add(toIndex, value);
+
+        Map<String, Relationship> relationships = new LinkedHashMap<String, Relationship>();
+        for (int i = 0, s = keys.size(); i < s; i++) {
+            relationships.put(keys.get(i), values.get(i));
+        }
+
+        this.relationships = relationships;
+    }
+
     /** Removes an attribute named <code>attrName</code>. */
     public void removeAttribute(String attrName) {
         attributes.remove(attrName);
@@ -221,10 +258,10 @@ public abstract class Entity implements CayenneMapEntry, XMLSerializable, Serial
     /**
      * Returns an unmodifiable map of relationships sorted by name.
      */
-    public SortedMap<String, ? extends Relationship> getRelationshipMap() {
+    public Map<String, ? extends Relationship> getRelationshipMap() {
         // create a new instance ... earlier attempts to cache it in the entity caused
         // serialization issues (esp. with Hessian).
-        return Collections.unmodifiableSortedMap(relationships);
+        return Collections.unmodifiableMap(relationships);
     }
 
     /**
@@ -257,10 +294,10 @@ public abstract class Entity implements CayenneMapEntry, XMLSerializable, Serial
     /**
      * Returns an unmodifiable sorted map of entity attributes.
      */
-    public SortedMap<String, ? extends Attribute> getAttributeMap() {
+    public Map<String, ? extends Attribute> getAttributeMap() {
         // create a new instance ... earlier attempts to cache it in the entity caused
         // serialization issues (esp. with Hessian).
-        return Collections.unmodifiableSortedMap(attributes);
+        return Collections.unmodifiableMap(attributes);
     }
 
     /**

@@ -105,13 +105,6 @@ public class CallbackDescriptorTableModel extends CayenneTableModel {
     }
 
     /**
-     * sorting disabled
-     */
-    protected void orderList() {
-        // NOOP
-    }
-
-    /**
      * @param column column index
      * @return column name
      */
@@ -178,14 +171,5 @@ public class CallbackDescriptorTableModel extends CayenneTableModel {
      */
     public CallbackType getCallbackType() {
         return callbackType;
-    }
-    
-    @Override
-    public boolean isColumnSortable(int sortCol) {
-        return false;
-    }
-
-    @Override
-    public void sortByColumn(int sortCol, boolean isAscent) {
     }
 }

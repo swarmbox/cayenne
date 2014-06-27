@@ -54,7 +54,6 @@ import org.apache.cayenne.modeler.event.AttributeDisplayEvent;
 import org.apache.cayenne.modeler.event.DbEntityDisplayListener;
 import org.apache.cayenne.modeler.event.EntityDisplayEvent;
 import org.apache.cayenne.modeler.event.TablePopupHandler;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.ModelerUtil;
 import org.apache.cayenne.modeler.util.PanelFactory;
@@ -70,7 +69,6 @@ public class DbEntityAttributeTab extends JPanel implements DbEntityDisplayListe
 
     protected ProjectController mediator;
     protected CayenneTable table;
-    private TableColumnPreferences tablePreferences;
 
     public DbEntityAttributeTab(ProjectController temp_mediator) {
         super();
@@ -126,10 +124,6 @@ public class DbEntityAttributeTab extends JPanel implements DbEntityDisplayListe
 
         // Create table with two columns and no rows.
         table = new CayenneTable();
-
-        tablePreferences = new TableColumnPreferences(
-                DbAttributeTableModel.class,
-                "attributeTable");
 
         /**
          * Create and install a popup
@@ -252,8 +246,6 @@ public class DbEntityAttributeTab extends JPanel implements DbEntityDisplayListe
         
         DbAttributeTableModel model = new DbAttributeTableModel(ent, mediator, this);
         table.setModel(model);
-        table.setRowHeight(25);
-        table.setRowMargin(3);
 
         TableColumn col = table.getColumnModel().getColumn(model.typeColumnInd());
 
@@ -268,7 +260,5 @@ public class DbEntityAttributeTab extends JPanel implements DbEntityDisplayListe
         col.setCellEditor(Application.getWidgetFactory().createCellEditor(comboBox));
 
         table.getSelectionModel().addListSelectionListener(this);
-
-        tablePreferences.bind(table, null, null, null, model.nameColumnInd(), true);
     }
 }

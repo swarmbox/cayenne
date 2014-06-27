@@ -52,7 +52,6 @@ import org.apache.cayenne.modeler.event.EmbeddableAttributeDisplayEvent;
 import org.apache.cayenne.modeler.event.EmbeddableDisplayEvent;
 import org.apache.cayenne.modeler.event.EmbeddableDisplayListener;
 import org.apache.cayenne.modeler.event.TablePopupHandler;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.ModelerUtil;
 import org.apache.cayenne.modeler.util.PanelFactory;
@@ -65,7 +64,6 @@ public class EmbeddableAttributeTab extends JPanel implements
 
     protected ProjectController mediator;
     protected CayenneTable table;
-    protected TableColumnPreferences tablePreferences;
 
     JButton resolve;
 
@@ -94,10 +92,6 @@ public class EmbeddableAttributeTab extends JPanel implements
         add(toolBar, BorderLayout.NORTH);
 
         table = new CayenneTable();
-
-        tablePreferences = new TableColumnPreferences(
-                this.getClass(),
-                "embeddable/attributeTable");
 
         // Create and install a popup
         JPopupMenu popup = new JPopupMenu();
@@ -185,15 +179,6 @@ public class EmbeddableAttributeTab extends JPanel implements
         AutoCompletion.enable(javaTypesCombo, false, true);
         typeColumn.setCellEditor(Application.getWidgetFactory().createCellEditor(
                 javaTypesCombo));
-
-        tablePreferences.bind(
-                table,
-                null,
-                null,
-                null,
-                EmbeddableAttributeTableModel.OBJ_ATTRIBUTE,
-                true);
-
     }
 
     /**

@@ -54,7 +54,6 @@ import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.CayenneTableModel;
 import org.apache.cayenne.modeler.util.CellEditorForAttributeTable;
 import org.apache.cayenne.modeler.util.ModelerUtil;
-import org.apache.cayenne.util.Util;
 
 /**
  * Model for the Object Entity attributes and for Obj to DB Attribute Mapping tables.
@@ -90,17 +89,16 @@ public class ObjAttributeTableModel extends CayenneTableModel<ObjAttributeWrappe
         // take a copy
         this.entity = entity;
         this.dbEntity = entity.getDbEntity();
-
-        // order using local comparator
-        Collections.sort(objectList, new AttributeComparator());
-    }
-    
-    protected void orderList() {
-        // NOOP
     }
 
     public CayenneTable getTable() {
         return table;
+    }
+
+    @Override
+    public void moveRow(int fromIndex, int toIndex) {
+        this.entity.moveAttribute(fromIndex, toIndex);
+        super.moveRow(fromIndex, toIndex);
     }
 
     public Class getColumnClass(int col) {
@@ -480,93 +478,5 @@ public class ObjAttributeTableModel extends CayenneTableModel<ObjAttributeWrappe
 
     public ObjEntity getEntity() {
         return entity;
-    }
-
-    final class AttributeComparator implements Comparator {
-
-        public int compare(Object o1, Object o2) {
-            Attribute a1 = ((ObjAttributeWrapper) o1).getValue();
-            Attribute a2 = ((ObjAttributeWrapper) o2).getValue();
-
-            int delta = getWeight(a1) - getWeight(a2);
-
-            return (delta != 0) ? delta : Util.nullSafeCompare(true, a1.getName(), a2
-                    .getName());
-        }
-
-        private int getWeight(Attribute a) {
-            return a.getEntity() == entity ? 1 : -1;
-        }
-    }
-
-    @Override
-    public void sortByColumn(final int sortCol, boolean isAscent) {
-        switch (sortCol) {
-            case INHERITED:
-                sortByElementProperty("inherited", isAscent);
-                break;
-            case OBJ_ATTRIBUTE:
-                sortByElementProperty("name", isAscent);
-                break;
-            case OBJ_ATTRIBUTE_TYPE:
-                sortByElementProperty("type", isAscent);
-                break;
-            case LOCKING:
-                sortByElementProperty("usedForLocking", isAscent);
-                break;
-            case DB_ATTRIBUTE:
-            case DB_ATTRIBUTE_TYPE:
-                Collections.sort(objectList, new Comparator<ObjAttributeWrapper>() {
-
-                    public int compare(ObjAttributeWrapper o1, ObjAttributeWrapper o2) {
-                        Integer compareObjAttributesVal = compareObjAttributes(o1, o2);
-                        if (compareObjAttributesVal != null) {
-                            return compareObjAttributesVal;
-                        }
-
-                        String valToCompare1 = getDBAttribute(o1, o1.getDbAttribute());
-                        String valToCompare2 = getDBAttribute(o2, o2.getDbAttribute());
-                        switch (sortCol) {
-                            case DB_ATTRIBUTE:
-                                valToCompare1 = getDBAttribute(o1, o1.getDbAttribute());
-                                valToCompare2 = getDBAttribute(o2, o2.getDbAttribute());
-                                break;
-                            case DB_ATTRIBUTE_TYPE:
-                                valToCompare1 = getDBAttributeType(o1, o1
-                                        .getDbAttribute());
-                                valToCompare2 = getDBAttributeType(o2, o2
-                                        .getDbAttribute());
-                                break;
-                        }
-                        return (valToCompare1 == null) ? -1 : (valToCompare2 == null)
-                                ? 1
-                                : valToCompare1.compareTo(valToCompare2);
-                    }
-
-                });
-                if (!isAscent) {
-                    Collections.reverse(objectList);
-                }
-                break;
-
-        }
-    }
-
-    @Override
-    public boolean isColumnSortable(int sortCol) {
-        return true;
-    }
-
-    private Integer compareObjAttributes(ObjAttributeWrapper o1, ObjAttributeWrapper o2) {
-        if ((o1 == null && o2 == null) || o1 == o2) {
-            return 0;
-        }
-        else if (o1 == null && o2 != null) {
-            return -1;
-        }
-        else if (o1 != null && o2 == null) {
-            return 1;
-        }
-        return null;
     }
 }

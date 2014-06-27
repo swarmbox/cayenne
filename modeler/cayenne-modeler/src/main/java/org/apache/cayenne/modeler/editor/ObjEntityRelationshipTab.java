@@ -71,7 +71,6 @@ import org.apache.cayenne.modeler.event.EntityDisplayEvent;
 import org.apache.cayenne.modeler.event.ObjEntityDisplayListener;
 import org.apache.cayenne.modeler.event.RelationshipDisplayEvent;
 import org.apache.cayenne.modeler.event.TablePopupHandler;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.CellRenderers;
 import org.apache.cayenne.modeler.util.ModelerUtil;
@@ -99,7 +98,6 @@ public class ObjEntityRelationshipTab extends JPanel implements ObjEntityDisplay
     ProjectController mediator;
 
     CayenneTable table;
-    private TableColumnPreferences tablePreferences;
 
     JButton resolve;
 
@@ -154,10 +152,6 @@ public class ObjEntityRelationshipTab extends JPanel implements ObjEntityDisplay
         table = new CayenneTable();
         table.setDefaultRenderer(String.class, new StringRenderer());
         table.setDefaultRenderer(ObjEntity.class, new EntityRenderer());
-
-        tablePreferences = new TableColumnPreferences(
-                ObjRelationshipTableModel.class,
-                "objEntity/relationshipTable");
 
         /**
          * Create and install a popup
@@ -429,14 +423,6 @@ public class ObjEntityRelationshipTab extends JPanel implements ObjEntityDisplay
         deleteRulesCombo.setSelectedIndex(0); // Default to the first value
         col.setCellEditor(Application.getWidgetFactory().createCellEditor(
                 deleteRulesCombo));
-
-        tablePreferences.bind(
-                table,
-                null,
-                null,
-                null,
-                ObjRelationshipTableModel.REL_NAME,
-                true);
     }
 
     class EntityRenderer extends StringRenderer {

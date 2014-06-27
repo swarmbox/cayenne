@@ -338,14 +338,6 @@ public class ObjAttributeInfoDialog extends CayenneController implements
                 .getColumn(OverrideEmbeddableAttributeTableModel.DB_ATTRIBUTE_TYPE);
         dbAttrTypeColumn.setCellRenderer(renderer);
         
-        view.getTablePreferences().bind(
-                view.getOverrideAttributeTable(),
-                null,
-                null,
-                null,
-                OverrideEmbeddableAttributeTableModel.OBJ_ATTRIBUTE,
-                true);
-        
         initComboBoxes();
 
     }

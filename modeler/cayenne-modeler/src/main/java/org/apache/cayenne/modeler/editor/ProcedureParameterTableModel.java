@@ -260,25 +260,7 @@ public class ProcedureParameterTableModel extends CayenneTableModel {
         return String.class;
     }
 
-    /**
-     * Suppressed ordering operations defined in a superclass.
-     * Since stored procedure parameters are positional,
-     * no reordering is allowed.
-     */
-    public void orderList() {
-        // NOOP
-    }
-
     public boolean isCellEditable(int row, int col) {
         return col != PARAMETER_NUMBER;
-    }
-
-    @Override
-    public boolean isColumnSortable(int sortCol) {
-        return false;
-    }
-
-    @Override
-    public void sortByColumn(int sortCol, boolean isAscent) {
     }
 }

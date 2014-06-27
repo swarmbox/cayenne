@@ -60,7 +60,6 @@ import org.apache.cayenne.modeler.action.RemoveCallbackMethodAction;
 import org.apache.cayenne.modeler.event.CallbackMethodEvent;
 import org.apache.cayenne.modeler.event.CallbackMethodListener;
 import org.apache.cayenne.modeler.event.TablePopupHandler;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.util.CayenneAction;
 import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.ModelerUtil;
@@ -96,11 +95,6 @@ public abstract class AbstractCallbackMethodsTab extends JPanel {
      */
     protected JPanel auxPanel;
     
-    /**
-     * preferences for the callback methods table
-     */
-    protected TableColumnPreferences tablePreferences;
-
     /**
      * list of callback method types
      */
@@ -205,11 +199,6 @@ public abstract class AbstractCallbackMethodsTab extends JPanel {
     }
 
     /**
-     * Inits the {@link TableColumnPreferences} object according to callback table name.
-     */
-    protected abstract void initTablePreferences();
-
-    /**
      * listeners initialization
      */
     protected void initController() {
@@ -286,9 +275,6 @@ public abstract class AbstractCallbackMethodsTab extends JPanel {
             
             tables[i].setModel(model);
         }
-       	
-       	for(int i = 0; i < tables.length; i++)
-       		tablePreferences.bind(tables[i], null, null, null);
     }
     
     private void createTables() {
@@ -301,8 +287,6 @@ public abstract class AbstractCallbackMethodsTab extends JPanel {
        		builder.append(createTablePanel(tables[index++]));
     	}
       	
-      	initTablePreferences();
-
         auxPanel.add(builder.getPanel(), BorderLayout.CENTER);
         validate();
     }
@@ -593,7 +577,6 @@ public abstract class AbstractCallbackMethodsTab extends JPanel {
 	    			tables[i].getColumnModel().getColumn(0).setPreferredWidth(table.getWidth());
 		    	}
 		    	
-		    	initTablePreferences();
 	        	table.setColumnWidthChanged(false);
 	        }
 	    }
@@ -625,7 +608,6 @@ public abstract class AbstractCallbackMethodsTab extends JPanel {
 		public void mouseDragged(MouseEvent e) {
 	    	if(table.getColumnWidthChanged())
 	        {
-	    		tablePreferences.bind(table, null, null, null);
 		    	for(int i=0; i<tables.length; i++) {
 		    		if(!table.equals(tables[i])) {
 		    			tables[i].getColumnModel().getColumn(0).setPreferredWidth(table.getWidth());

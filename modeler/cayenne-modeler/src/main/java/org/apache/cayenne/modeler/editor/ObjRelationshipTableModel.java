@@ -24,11 +24,8 @@ import org.apache.cayenne.map.event.RelationshipEvent;
 import org.apache.cayenne.modeler.ProjectController;
 import org.apache.cayenne.modeler.util.CayenneTableModel;
 import org.apache.cayenne.modeler.util.ProjectUtil;
-import org.apache.cayenne.util.Util;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 
 /**
  * Table model to display ObjRelationships.
@@ -49,14 +46,12 @@ public class ObjRelationshipTableModel extends CayenneTableModel {
             Object eventSource) {
         super(mediator, eventSource, new ArrayList(entity.getRelationships()));
         this.entity = entity;
-
-        // order using local comparator
-        Collections.sort(objectList, new RelationshipComparator());
     }
 
     @Override
-    protected void orderList() {
-        // NOOP
+    public void moveRow(int fromIndex, int toIndex) {
+        this.entity.moveRelationship(fromIndex, toIndex);
+        super.moveRow(fromIndex, toIndex);
     }
 
     public ObjEntity getEntity() {
@@ -224,82 +219,5 @@ public class ObjRelationshipTableModel extends CayenneTableModel {
     @Override
     public boolean isCellEditable(int row, int col) {
         return !isInherited(row) && col != REL_SEMANTICS;
-    }
-
-    final class RelationshipComparator implements Comparator {
-
-        public int compare(Object o1, Object o2) {
-            ObjRelationship r1 = (ObjRelationship) o1;
-            ObjRelationship r2 = (ObjRelationship) o2;
-
-            int delta = getWeight(r1) - getWeight(r2);
-
-            return (delta != 0) ? delta : Util.nullSafeCompare(true, r1.getName(), r2
-                    .getName());
-        }
-
-        private int getWeight(ObjRelationship r) {
-            return r.getSourceEntity() == entity ? 1 : -1;
-        }
-    }
-
-    @Override
-    public boolean isColumnSortable(int sortCol) {
-        return true;
-    }
-
-    @Override
-    public void sortByColumn(final int sortCol, boolean isAscent) {
-        switch (sortCol) {
-            case REL_NAME:
-                sortByElementProperty("name", isAscent);
-                break;
-            case REL_TARGET:
-                sortByElementProperty("targetEntityName", isAscent);
-                break;
-            case REL_LOCKING:
-                sortByElementProperty("usedForLocking", isAscent);
-                break;
-            case REL_SEMANTICS:
-            case REL_DELETERULE:
-                Collections.sort(objectList, new Comparator<ObjRelationship>() {
-
-                    public int compare(ObjRelationship o1, ObjRelationship o2) {
-                        if ((o1 == null && o2 == null) || o1 == o2) {
-                            return 0;
-                        }
-                        else if (o1 == null && o2 != null) {
-                            return -1;
-                        }
-                        else if (o1 != null && o2 == null) {
-                            return 1;
-                        }
-                        
-                        String valueToCompare1 = "";
-                        String valueToCompare2 = "";
-                        switch(sortCol){
-                            case REL_SEMANTICS:
-                                valueToCompare1 = getSemantics(o1);
-                                valueToCompare2 = getSemantics(o2);
-                                break;
-                            case REL_DELETERULE:
-                                valueToCompare1 = DeleteRule.deleteRuleName(o1.getDeleteRule());
-                                valueToCompare2 = DeleteRule.deleteRuleName(o2.getDeleteRule());
-                                
-                                break;
-                        }
-                        return (valueToCompare1 == null) ? -1 : (valueToCompare2 == null)
-                                ? 1
-                                : valueToCompare1.compareTo(valueToCompare2);
-                    }
-
-                });
-                if (!isAscent) {
-                    Collections.reverse(objectList);
-                }
-                break;
-            
-        }
-
     }
 }

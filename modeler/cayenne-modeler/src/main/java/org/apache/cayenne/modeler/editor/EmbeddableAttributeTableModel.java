@@ -20,7 +20,6 @@ package org.apache.cayenne.modeler.editor;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 
 import org.apache.cayenne.map.Embeddable;
 import org.apache.cayenne.map.EmbeddableAttribute;
@@ -31,7 +30,6 @@ import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.CayenneTableModel;
 import org.apache.cayenne.modeler.util.CellEditorForAttributeTable;
 import org.apache.cayenne.modeler.util.ProjectUtil;
-import org.apache.cayenne.util.Util;
 
 public class EmbeddableAttributeTableModel extends CayenneTableModel {
 
@@ -143,42 +141,5 @@ public class EmbeddableAttributeTableModel extends CayenneTableModel {
 
     public boolean isCellEditable(int row, int col) {
         return true;
-    }
-
-    final class EmbeddableAttributeComparator implements Comparator {
-
-        public int compare(Object o1, Object o2) {
-            EmbeddableAttribute a1 = (EmbeddableAttribute) o1;
-            EmbeddableAttribute a2 = (EmbeddableAttribute) o2;
-
-            int delta = getWeight(a1) - getWeight(a2);
-
-            return (delta != 0) ? delta : Util.nullSafeCompare(true, a1.getName(), a2
-                    .getName());
-        }
-
-        private int getWeight(EmbeddableAttribute a) {
-            return a.getEmbeddable() == embeddable ? 1 : -1;
-        }
-    }
-
-    @Override
-    public boolean isColumnSortable(int sortCol) {
-        return true;
-    }
-
-    @Override
-    public void sortByColumn(int sortCol, boolean isAscent) {
-        switch (sortCol) {
-            case OBJ_ATTRIBUTE:
-                sortByElementProperty("name", isAscent);
-                break;
-            case OBJ_ATTRIBUTE_TYPE:
-                sortByElementProperty("type", isAscent);
-                break;
-            case DB_ATTRIBUTE:
-                sortByElementProperty("dbAttributeName", isAscent);
-                break;
-        }
     }
 }

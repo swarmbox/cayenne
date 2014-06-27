@@ -47,7 +47,6 @@ import org.apache.cayenne.map.Relationship;
 import org.apache.cayenne.map.event.MapEvent;
 import org.apache.cayenne.map.event.RelationshipEvent;
 import org.apache.cayenne.modeler.Application;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.undo.RelationshipUndoableEdit;
 import org.apache.cayenne.modeler.util.CayenneDialog;
 import org.apache.cayenne.modeler.util.CayenneTable;
@@ -72,7 +71,6 @@ public class ResolveDbRelationshipDialog extends CayenneDialog {
     protected JTextField name;
     protected JTextField reverseName;
     protected CayenneTable table;
-    protected TableColumnPreferences tablePreferences;
     protected JButton addButton;
     protected JButton removeButton;
     protected JButton saveButton;
@@ -126,7 +124,6 @@ public class ResolveDbRelationshipDialog extends CayenneDialog {
         table = new AttributeTable();
 
         table.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        tablePreferences = new TableColumnPreferences(getClass(), "dbentity/dbjoinTable");
 
         // assemble
         getContentPane().setLayout(new BorderLayout());
@@ -214,7 +211,6 @@ public class ResolveDbRelationshipDialog extends CayenneDialog {
         }
 
         name.setText(relationship.getName());
-        tablePreferences.bind(table, null, null, null, DbJoinTableModel.SOURCE, true);
     }
 
     private void initController() {
