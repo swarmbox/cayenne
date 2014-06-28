@@ -20,6 +20,7 @@ package org.apache.cayenne.reflect;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,6 +56,7 @@ public class LifecycleCallbackRegistry {
     private LifecycleCallbackEventHandler[] eventCallbacks;
     private Map<String, AnnotationReader> annotationsMap;
     private Map<String, Collection<Class<?>>> entitiesByAnnotation;
+    private Map<Class<?>, Boolean> processedEntityClasses;
 
     /**
      * Creates an empty callback registry.
@@ -73,6 +75,11 @@ public class LifecycleCallbackRegistry {
 
         // other "static" lookup maps are initialized on-demand
         this.entitiesByAnnotation = new ConcurrentHashMap<String, Collection<Class<?>>>();
+        this.processedEntityClasses = new ConcurrentHashMap<Class<?>, Boolean>();
+
+        // prepopulating the map so that class hierarchy traversal could
+        // terminate when it reaches Object.
+        processedEntityClasses.put(Object.class, true);
     }
 
     /**
@@ -160,6 +167,52 @@ public class LifecycleCallbackRegistry {
     }
     
     /**
+     * Registers annotated methods of the entity class as callbacks for entity
+     * events.
+     *
+     * @since 3.2
+     */
+    public void addCallbacks(Class<?> entityClass) {
+        if (entityClass == null) {
+            throw new NullPointerException("Null entity class");
+        }
+
+        // Only process Persistent Objects
+        if (!Persistent.class.isAssignableFrom(entityClass)) {
+            throw new CayenneRuntimeException("Class not assignable from Entity");
+        }
+
+        while (entityClass != null && processedEntityClasses.put(entityClass, true) == null) {
+
+            for (Method m : entityClass.getDeclaredMethods()) {
+                for (Annotation a : m.getAnnotations()) {
+                    AnnotationReader reader = this.getAnnotationsMap().get(a.annotationType().getName());
+                    if (reader != null) {
+
+                        // Only register lifecycle annotations used as markers
+                        // (both entities and entityAnnotations must be empty)
+                        if (reader.entities(a).length > 0) {
+                            throw new CayenneRuntimeException(
+                                    "Entity listener annotation should not contain 'entities': " + m.getName());
+                        }
+
+                        if (reader.entityAnnotations(a).length > 0) {
+                            throw new CayenneRuntimeException(
+                                    "Entity listener annotation should not contain 'entityAnnotations': " + m.getName());
+                        }
+
+                        this.eventCallbacks[reader.eventType().ordinal()].addListener(entityClass, m.getName());
+
+                    }
+                }
+            }
+
+            entityClass = entityClass.getSuperclass();
+        }
+
+    }
+    
+    /**
      * @since 3.2 renamed to {@link #addCallback(LifecycleEvent, Class, String)}.
      */
     @Deprecated
@@ -192,11 +245,22 @@ public class LifecycleCallbackRegistry {
                         Class<? extends Annotation>[] entityAnnotations = reader.entityAnnotations(a);
 
                         for (Class<?> type : entities) {
-                            // TODO: ignoring entity subclasses? whenever we add
-                            // those,
-                            // take
-                            // into account "exlcudeSuperclassListeners" flag
-                            types.add(type);
+                            // TODO: ignoring entity subclasses? whenever we add those,
+                            // take into account "excludeSuperclassListeners" flag
+
+                            // If type is an interface register all entities that implement it
+                            if (type.isInterface()) {
+                                for (ObjEntity entity : this.entityResolver.getObjEntities()) {
+                                    if (type.isAssignableFrom(entity.getJavaClass()) && !entity.isAbstract()) {
+                                        types.add(entity.getJavaClass());
+                                    }
+                                }
+                            } else {
+                                if (!Modifier.isAbstract(type.getModifiers())) {
+                                    types.add(type);
+                                }
+                            }
+
                         }
 
                         for (Class<? extends Annotation> type : entityAnnotations) {

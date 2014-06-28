@@ -19,19 +19,12 @@
 
 package org.apache.cayenne.modeler.util;
 
-import java.beans.BeanInfo;
-import java.beans.IntrospectionException;
-import java.beans.Introspector;
-import java.beans.PropertyDescriptor;
-import java.lang.reflect.Method;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 import javax.swing.JOptionPane;
 import javax.swing.table.AbstractTableModel;
 
-import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.modeler.Application;
 import org.apache.cayenne.modeler.ProjectController;
 import org.apache.cayenne.modeler.undo.CayenneTableModelUndoableEdit;
@@ -61,8 +54,6 @@ public abstract class CayenneTableModel<T> extends AbstractTableModel {
         this.eventSource = eventSource;
         this.mediator = mediator;
         this.objectList = objectList;
-
-        //orderList();
     }
 
     public void setValueAt(Object newVal, int row, int col) {
@@ -94,30 +85,9 @@ public abstract class CayenneTableModel<T> extends AbstractTableModel {
     public abstract void setUpdatedValueAt(Object newVal, int row, int col);
 
     /**
-     * Orders internal object list. Key returned by <code>getOrderingKey</code> is used
-     * for comparison.
-     */
-    protected void orderList() {
-        String key = getOrderingKey();
-        if (key != null) {
-            Collections.sort(objectList, new PropertyComparator(
-                    getOrderingKey(),
-                    getElementsClass()));
-        }
-    }
-
-    /**
      * Returns Java class of the internal list elements.
      */
     public abstract Class<?> getElementsClass();
-
-    /**
-     * Returns the key by which to order elements in the object list. Default value is
-     * "name".
-     */
-    public String getOrderingKey() {
-        return "name";
-    }
 
     /**
      * Returns the number of objects on the list.
@@ -155,6 +125,15 @@ public abstract class CayenneTableModel<T> extends AbstractTableModel {
     public void removeRow(Object row) {
         objectList.remove(row);
         fireTableDataChanged();
+    }
+
+    public void moveRow(int fromIndex, int toIndex) {
+        T row = objectList.remove(fromIndex);
+        objectList.add(toIndex, row);
+        fireTableDataChanged();
+
+        //TODO Create Move*Action so that we can revert
+        mediator.setDirty(true);
     }
 
     /**
@@ -220,68 +199,4 @@ public abstract class CayenneTableModel<T> extends AbstractTableModel {
 		return true;
 	}
 
-    protected class PropertyComparator implements Comparator {
-
-        Method getter;
-
-        PropertyComparator(String propertyName, Class beanClass) {
-            try {
-                getter = findGetter(beanClass, propertyName);
-            }
-            catch (IntrospectionException e) {
-                throw new CayenneRuntimeException("Introspection error", e);
-            }
-        }
-
-        Method findGetter(Class beanClass, String propertyName)
-                throws IntrospectionException {
-            BeanInfo info = Introspector.getBeanInfo(beanClass);
-            PropertyDescriptor[] descriptors = info.getPropertyDescriptors();
-
-            for (PropertyDescriptor descriptor : descriptors) {
-                if (propertyName.equals(descriptor.getName())) {
-                    return descriptor.getReadMethod();
-                }
-            }
-
-            throw new IntrospectionException("No getter found for " + propertyName);
-        }
-
-        public int compare(Object o1, Object o2) {
-
-            if ((o1 == null && o2 == null) || o1 == o2) {
-                return 0;
-            }
-            else if (o1 == null && o2 != null) {
-                return -1;
-            }
-            else if (o1 != null && o2 == null) {
-                return 1;
-            }
-
-            try {
-                Comparable p1 = (Comparable) getter.invoke(o1);
-                Comparable p2 = (Comparable) getter.invoke(o2);
-                
-                return (p1 == null) ? -1 : (p2 == null)? 1 : p1.compareTo(p2);
-            }
-            catch (Exception ex) {
-                throw new CayenneRuntimeException("Error reading property.", ex);
-            }
-        }
-    }
-
-    public abstract void sortByColumn(int sortCol, boolean isAscent);
-    
-    public abstract boolean isColumnSortable(int sortCol);
-    
-    public void sortByElementProperty(String string, boolean isAscent) {
-        Collections.sort(objectList, new PropertyComparator(
-                string,
-                getElementsClass()));
-        if(!isAscent){
-            Collections.reverse(objectList);
-        }
-    }
-    
 }

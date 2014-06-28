@@ -740,9 +740,9 @@ public class ObjEntity extends Entity implements ObjEntityListener, Configuratio
      * ObjEntity or inherited.
      */
     @Override
-    public SortedMap<String, ObjAttribute> getAttributeMap() {
+    public Map<String, ObjAttribute> getAttributeMap() {
         if (superEntityName == null) {
-            return (SortedMap<String, ObjAttribute>) super.getAttributeMap();
+            return (Map<String, ObjAttribute>) super.getAttributeMap();
         }
 
         SortedMap<String, ObjAttribute> attributeMap = new TreeMap<String, ObjAttribute>();
@@ -831,9 +831,9 @@ public class ObjEntity extends Entity implements ObjEntityListener, Configuratio
     }
 
     @Override
-    public SortedMap<String, ObjRelationship> getRelationshipMap() {
+    public Map<String, ObjRelationship> getRelationshipMap() {
         if (superEntityName == null) {
-            return (SortedMap<String, ObjRelationship>) super.getRelationshipMap();
+            return (Map<String, ObjRelationship>) super.getRelationshipMap();
         }
 
         SortedMap<String, ObjRelationship> relationshipMap = new TreeMap<String, ObjRelationship>();

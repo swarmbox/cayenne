@@ -67,7 +67,6 @@ import org.apache.cayenne.modeler.event.DbEntityDisplayListener;
 import org.apache.cayenne.modeler.event.EntityDisplayEvent;
 import org.apache.cayenne.modeler.event.RelationshipDisplayEvent;
 import org.apache.cayenne.modeler.event.TablePopupHandler;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.CellRenderers;
 import org.apache.cayenne.modeler.util.ModelerUtil;
@@ -86,7 +85,6 @@ public class DbEntityRelationshipTab extends JPanel implements DbEntityDisplayLi
     protected ProjectController mediator;
     protected CayenneTable table;
     protected JButton resolve;
-    private TableColumnPreferences tablePreferences;
 
     /**
      * By now popup menu item is made similiar to toolbar button. (i.e. all functionality
@@ -159,10 +157,6 @@ public class DbEntityRelationshipTab extends JPanel implements DbEntityDisplayLi
         table = new CayenneTable();
         table.setDefaultRenderer(DbEntity.class, CellRenderers
                 .entityTableRendererWithIcons(mediator));
-
-        tablePreferences = new TableColumnPreferences(
-                DbRelationshipTableModel.class,
-                "relationshipTable");
 
         /**
          * Create and install a popup
@@ -315,14 +309,6 @@ public class DbEntityRelationshipTab extends JPanel implements DbEntityDisplayLi
         targetCombo.setModel(createComboModel(entity));
         col.setCellEditor(Application.getWidgetFactory().createCellEditor(targetCombo));
         table.getSelectionModel().addListSelectionListener(this);
-
-        tablePreferences.bind(
-                table,
-                null,
-                null,
-                null,
-                DbRelationshipTableModel.NAME,
-                true);
     }
 
     public void dbEntityChanged(EntityEvent e) {

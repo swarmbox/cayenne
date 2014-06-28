@@ -79,7 +79,6 @@ import org.apache.cayenne.modeler.event.ObjEntityDisplayListener;
 import org.apache.cayenne.modeler.event.ProjectOnSaveEvent;
 import org.apache.cayenne.modeler.event.ProjectOnSaveListener;
 import org.apache.cayenne.modeler.event.TablePopupHandler;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.CayenneTableModel;
 import org.apache.cayenne.modeler.util.ModelerUtil;
@@ -96,7 +95,6 @@ public class ObjEntityAttributeTab extends JPanel implements ObjEntityDisplayLis
 
     protected ProjectController mediator;
     protected CayenneTable table;
-    private TableColumnPreferences tablePreferences;
 
     JButton resolve;
 
@@ -137,10 +135,6 @@ public class ObjEntityAttributeTab extends JPanel implements ObjEntityDisplayLis
         table = new CayenneTable();
         table.setDefaultRenderer(String.class, new CellRenderer());
         table.setDefaultRenderer(Boolean.class, new CheckBoxRenderer());
-        
-        tablePreferences = new TableColumnPreferences(
-                ObjAttributeTableModel.class,
-                "objEntity/attributeTable");
 
         // Create and install a popup
         JPopupMenu popup = new JPopupMenu();
@@ -415,14 +409,6 @@ public class ObjEntityAttributeTab extends JPanel implements ObjEntityDisplayLis
         maxSizes.put(ObjAttributeTableModel.INHERITED, inheritanceColumnWidth);
 
         initComboBoxes(model);
-
-        tablePreferences.bind(
-                table,
-                minSizes,
-                maxSizes,
-                null,
-                ObjAttributeTableModel.OBJ_ATTRIBUTE,
-                true);
     }
 
     /**

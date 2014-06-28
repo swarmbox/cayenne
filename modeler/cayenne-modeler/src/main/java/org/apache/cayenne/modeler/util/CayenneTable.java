@@ -19,23 +19,28 @@
 
 package org.apache.cayenne.modeler.util;
 
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.dnd.DragSource;
 
+import javax.activation.DataHandler;
 import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultListSelectionModel;
+import javax.swing.DropMode;
+import javax.swing.JComponent;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.TransferHandler;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.TableModelEvent;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.JTableHeader;
-import javax.swing.table.TableCellEditor;
-import javax.swing.table.TableColumnModel;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableModel;
-import javax.swing.text.JTextComponent;
 
 import org.apache.cayenne.modeler.Application;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 
 /**
  * Common superclass of tables used in Cayenne. Contains some common configuration
@@ -44,33 +49,80 @@ import org.apache.cayenne.modeler.pref.TableColumnPreferences;
  */
 public class CayenneTable extends JTable {
 
-    private SortButtonRenderer renderer = new SortButtonRenderer();
-    protected TableHeaderSortingListener tableHeaderListener;
+    private static Color ALTERNATE_COLOR = new Color(243, 246, 250);
+    
     private boolean isColumnWidthChanged;
 
     public CayenneTable() {
         super();
         this.setRowHeight(25);
-        this.setRowMargin(3);
-        JTableHeader header = getTableHeader();
-        tableHeaderListener = new TableHeaderSortingListener(header, renderer);
-        header.addMouseListener(tableHeaderListener);
+        this.setRowMargin(0);
+        this.setIntercellSpacing(new Dimension(0, 0));
+        this.setShowGrid(false);
+
         setSelectionModel(new CayenneListSelectionModel());
-    }
 
-    @Override
-    public void setModel(TableModel dataModel) {
+        // Disable Sorting
+        this.setRowSorter(null);
 
-        super.setModel(dataModel);
-        if (!(dataModel instanceof DefaultTableModel)) {
-            TableColumnModel model = getColumnModel();
+        // Drag and Drop
+        final JTable table = this;
+        this.setSelectionMode(DefaultListSelectionModel.SINGLE_SELECTION);
+        this.setDragEnabled(true);
+        this.setDropMode(DropMode.INSERT_ROWS);
+        this.setTransferHandler(new TransferHandler() {
 
-            for (int i = 0; i < getColumnCount(); i++) {
-                model.getColumn(i).setHeaderRenderer(renderer);
+            private final DataFlavor localObjectFlavor = new DataFlavor(Integer.class, "Integer Row Index");
 
+            @Override
+            protected Transferable createTransferable(JComponent c) {
+                return new DataHandler(table.getSelectedRow(), localObjectFlavor.getMimeType());
             }
 
-        }
+            @Override
+            public boolean canImport(TransferHandler.TransferSupport info) {
+                boolean b = info.getComponent() == table && info.isDrop() && info.isDataFlavorSupported(localObjectFlavor);
+                table.setCursor(b ? DragSource.DefaultMoveDrop : DragSource.DefaultMoveNoDrop);
+                return b;
+            }
+
+            @Override
+            public int getSourceActions(JComponent c) {
+                return TransferHandler.MOVE;
+            }
+
+            @Override
+            public boolean importData(TransferHandler.TransferSupport info) {
+                JTable target = (JTable) info.getComponent();
+                JTable.DropLocation dl = (JTable.DropLocation) info.getDropLocation();
+                int index = dl.getRow();
+                int max = table.getModel().getRowCount();
+                if (index < 0 || index > max)
+                    index = max;
+                target.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                try {
+                    Integer rowFrom = (Integer) info.getTransferable().getTransferData(localObjectFlavor);
+                    if (rowFrom != -1 && rowFrom != index) {
+                        if (index > rowFrom)
+                            index--;
+                        ((CayenneTableModel) table.getModel()).moveRow(rowFrom, index);
+                        target.getSelectionModel().addSelectionInterval(index, index);
+                        return true;
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return false;
+            }
+
+            @Override
+            protected void exportDone(JComponent c, Transferable t, int act) {
+                if (act == TransferHandler.MOVE) {
+                    table.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                }
+            }
+
+        });
     }
 
     @Override
@@ -136,23 +188,6 @@ public class CayenneTable extends JTable {
      */
     public void select(int[] rows) {
         ((CayenneListSelectionModel) getSelectionModel()).setSelection(rows);
-    }
-
-    public JTextComponent getSelectedTextComponent() {
-        int row = getSelectedRow();
-        int column = getSelectedColumn();
-        if (row < 0 || column < 0) {
-            return null;
-        }
-
-        TableCellEditor editor = this.getCellEditor(row, column);
-        if (editor instanceof DefaultCellEditor) {
-            Component comp = ((DefaultCellEditor) editor).getComponent();
-            if (comp instanceof JTextComponent) {
-                return (JTextComponent) comp;
-            }
-        }
-        return null;
     }
 
     @Override
@@ -242,22 +277,30 @@ public class CayenneTable extends JTable {
         }
     }
 
-    public void sort(int column, boolean isAscend) {
-        tableHeaderListener.sortByDefinedColumn(
-                convertColumnIndexToView(column),
-                column,
-                isAscend);
-    }
-
-    public void setSortPreferenceSaver(TableColumnPreferences tableColumnPreferences) {
-        tableHeaderListener.setPreferences(tableColumnPreferences);
-    }
-    
     public boolean getColumnWidthChanged() {
         return isColumnWidthChanged;
     }
 
     public void setColumnWidthChanged(boolean widthChanged) {
         isColumnWidthChanged = widthChanged;
+    }
+
+    @Override
+    public Component prepareRenderer(TableCellRenderer renderer, int row, int column) {
+        Component component = super.prepareRenderer(renderer, row, column);
+        if (row % 2 == 0) {
+            if (isCellSelected(row, column)) {
+                component.setBackground(Color.BLUE);
+            } else {
+                component.setBackground(ALTERNATE_COLOR);
+            }
+        } else {
+            if (isCellSelected(row, column)) {
+                component.setBackground(Color.BLUE);
+            } else {
+                component.setBackground(Color.WHITE);
+            }
+        }
+        return component;
     }
 }

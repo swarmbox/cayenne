@@ -59,7 +59,6 @@ import org.apache.cayenne.modeler.event.ProcedureDisplayEvent;
 import org.apache.cayenne.modeler.event.ProcedureDisplayListener;
 import org.apache.cayenne.modeler.event.ProcedureParameterDisplayEvent;
 import org.apache.cayenne.modeler.event.TablePopupHandler;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.util.CayenneCellEditor;
 import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.ModelerUtil;
@@ -75,7 +74,6 @@ public class ProcedureParameterTab extends JPanel implements ProcedureParameterL
     protected ProjectController eventController;
 
     protected CayenneTable table;
-    protected TableColumnPreferences tablePreferences;
     protected JButton removeParameterButton;
     protected JButton moveUp;
     protected JButton moveDown;
@@ -150,10 +148,6 @@ public class ProcedureParameterTab extends JPanel implements ProcedureParameterL
 
         // Create table with two columns and no rows.
         table = new CayenneTable();
-
-        tablePreferences = new TableColumnPreferences(
-                this.getClass(),
-                "procedure/parameterTable");
 
         // Create and install a popup
         JPopupMenu popup = new JPopupMenu();
@@ -312,8 +306,6 @@ public class ProcedureParameterTab extends JPanel implements ProcedureParameterL
 
         moveUp.setEnabled(false);
         moveDown.setEnabled(false);
-
-        tablePreferences.bind(table, null, null, null);
     }
 
     public void procedureParameterAdded(ProcedureParameterEvent e) {

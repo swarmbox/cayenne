@@ -40,7 +40,6 @@ import javax.swing.JTextField;
 import org.apache.cayenne.map.Embeddable;
 import org.apache.cayenne.modeler.Application;
 import org.apache.cayenne.modeler.ProjectController;
-import org.apache.cayenne.modeler.pref.TableColumnPreferences;
 import org.apache.cayenne.modeler.util.CayenneTable;
 import org.apache.cayenne.modeler.util.ModelerUtil;
 import org.apache.cayenne.modeler.util.MultiColumnBrowser;
@@ -71,7 +70,6 @@ public class ObjAttributeInfoDialogView extends JDialog {
     protected JPanel typeManagerPane;
 
     protected CayenneTable overrideAttributeTable;
-    protected TableColumnPreferences tablePreferences;
     
     ProjectController mediator;
 
@@ -99,7 +97,6 @@ public class ObjAttributeInfoDialogView extends JDialog {
         typeComboBox.getRenderer();
 
         overrideAttributeTable = new CayenneTable();
-        tablePreferences = new TableColumnPreferences(getClass(), "overrideAttributeTable");
         
         saveButton.setEnabled(false);
         cancelButton.setEnabled(true);
@@ -231,10 +228,6 @@ public class ObjAttributeInfoDialogView extends JDialog {
         return overrideAttributeTable;
     }
     
-    public TableColumnPreferences getTablePreferences() {
-        return tablePreferences;
-    }
-
     public JComboBox getTypeComboBox() {
         return typeComboBox;
     }

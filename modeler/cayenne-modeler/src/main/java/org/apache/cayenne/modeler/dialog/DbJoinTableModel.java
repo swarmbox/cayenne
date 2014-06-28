@@ -74,13 +74,6 @@ public class DbJoinTableModel extends CayenneTableModel {
         relationship.setJoins(getObjectList());
     }
 
-    /**
-     * Returns null to disable ordering.
-     */
-    public String getOrderingKey() {
-        return null;
-    }
-
     public int getColumnCount() {
         return 2;
     }
@@ -152,22 +145,5 @@ public class DbJoinTableModel extends CayenneTableModel {
         }
 
         return false;
-    }
-
-    @Override
-    public boolean isColumnSortable(int sortCol) {
-        return true;
-    }
-
-    @Override
-    public void sortByColumn(int sortCol, boolean isAscent) {
-        switch(sortCol){
-            case SOURCE:
-                sortByElementProperty("sourceName", isAscent);
-                break;
-            case TARGET:
-                sortByElementProperty("targetName", isAscent);
-                break;
-        }
     }
 }

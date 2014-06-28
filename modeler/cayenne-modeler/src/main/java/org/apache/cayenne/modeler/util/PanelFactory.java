@@ -119,12 +119,10 @@ public class PanelFactory {
      * AUTO_RESIZE_OFF and SINGLE_SELECTION respectively.
      */
     public static JPanel createTablePanel(JTable table, JButton[] buttons) {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BorderLayout(5, 5));
+        JPanel panel = new JPanel(new BorderLayout());
 
         // Create table with two columns and no rows.
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
         // Panel to add space between table and EAST/WEST borders
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
