@@ -639,13 +639,21 @@ public class MapLoader extends DefaultHandler {
      */
     public synchronized DataMap loadDataMap(InputSource src)
             throws CayenneRuntimeException {
+        String mapName = mapNameFromLocation(src.getSystemId());
+        return mergeDataMap(new DataMap(mapName), src);
+    }
+
+    /**
+     * Merges an existing DataMap with a DataMap from XML input source.
+     */
+    public synchronized DataMap mergeDataMap(DataMap existingDataMap, InputSource src)
+            throws CayenneRuntimeException {
         if (src == null) {
             throw new NullPointerException("Null InputSource.");
         }
 
         try {
-            String mapName = mapNameFromLocation(src.getSystemId());
-            dataMap = new DataMap(mapName);
+            dataMap = existingDataMap;
             XMLReader parser = Util.createXmlReader();
 
             parser.setContentHandler(this);

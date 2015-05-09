@@ -128,7 +128,11 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
                     Object value = (targetId != null) ? new PropagatedValueFactory(targetId, join.getTargetName())
                             : null;
 
-                    dbDiff.put(join.getSourceName(), value);
+                    // Since its possible for multiple ObjRelationships to share the same DbRelationship:
+                    //  don't allow dbDiff to accept a null value over a non-null value
+                    if (dbDiff.get(join.getSourceName()) == null) {
+                        dbDiff.put(join.getSourceName(), value);
+                    }
                 }
             }
         }
