@@ -18,15 +18,15 @@
  ****************************************************************/
 package org.apache.cayenne.reflect;
 
+import org.apache.cayenne.Persistent;
+import org.apache.cayenne.map.EntityResolver;
+import org.apache.cayenne.map.ObjEntity;
+
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-
-import org.apache.cayenne.Persistent;
-import org.apache.cayenne.map.EntityResolver;
-import org.apache.cayenne.map.ObjEntity;
 
 /**
  * A runtime callback processor for a single kind of lifecycle events.
@@ -97,6 +97,14 @@ class LifecycleCallbackEventHandler {
      */
     void addListener(Class<?> entityClass, String methodName) {
         addCallback(entityClass, new CallbackOnEntity(entityClass, methodName));
+    }
+
+    /**
+     * Registers a callback method to be invoked on an entity class instances when a
+     * lifecycle event occurs.
+     */
+    void addListener(Class<?> entityClass, Method method) {
+        addCallback(entityClass, new CallbackOnEntity(entityClass, method));
     }
 
     /**
@@ -172,6 +180,9 @@ class LifecycleCallbackEventHandler {
 
         // recursively perform super callbacks first
         if (!excludingSuperclassListeners(object.getObjectId().getEntityName())) {
+            for (Class c : callbackEntityClass.getInterfaces()) {
+                performCallbacks(object, c);
+            }
             performCallbacks(object, callbackEntityClass.getSuperclass());
         }
 

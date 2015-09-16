@@ -18,11 +18,11 @@
  ****************************************************************/
 package org.apache.cayenne.reflect;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-
 import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.util.Util;
+
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 
 /**
  * Defines a generic callback operation executed via reflection on a persistent object.
@@ -38,6 +38,13 @@ class CallbackOnEntity extends AbstractCallback {
     CallbackOnEntity(Class<?> objectClass, String methodName)
             throws IllegalArgumentException {
         this.callbackMethod = findMethod(objectClass, methodName);
+    }
+
+    CallbackOnEntity(Class<?> objectClass, Method method) {
+        if (!Util.isAccessible(method)) {
+            method.setAccessible(true);
+        }
+        this.callbackMethod = method;
     }
 
     @Override

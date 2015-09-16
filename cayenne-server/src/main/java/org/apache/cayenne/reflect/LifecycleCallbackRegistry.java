@@ -18,31 +18,20 @@
  ****************************************************************/
 package org.apache.cayenne.reflect;
 
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.LifecycleListener;
 import org.apache.cayenne.Persistent;
-import org.apache.cayenne.annotation.PostAdd;
-import org.apache.cayenne.annotation.PostLoad;
-import org.apache.cayenne.annotation.PostPersist;
-import org.apache.cayenne.annotation.PostRemove;
-import org.apache.cayenne.annotation.PostUpdate;
-import org.apache.cayenne.annotation.PrePersist;
-import org.apache.cayenne.annotation.PreRemove;
-import org.apache.cayenne.annotation.PreUpdate;
+import org.apache.cayenne.annotation.*;
 import org.apache.cayenne.map.EntityResolver;
 import org.apache.cayenne.map.LifecycleEvent;
 import org.apache.cayenne.map.ObjEntity;
 import org.apache.cayenne.util.Util;
+
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A registry of lifecycle callbacks for all callback event types. Valid event
@@ -165,25 +154,9 @@ public class LifecycleCallbackRegistry {
     public void addCallback(LifecycleEvent type, Class<?> entityClass, String methodName) {
         eventCallbacks[type.ordinal()].addListener(entityClass, methodName);
     }
-    
-    /**
-     * Registers annotated methods of the entity class as callbacks for entity
-     * events.
-     *
-     * @since 3.2
-     */
-    public void addCallbacks(Class<?> entityClass) {
-        if (entityClass == null) {
-            throw new NullPointerException("Null entity class");
-        }
 
-        // Only process Persistent Objects
-        if (!Persistent.class.isAssignableFrom(entityClass)) {
-            throw new CayenneRuntimeException("Class not assignable from Entity");
-        }
-
+    private void x(Class<?> entityClass) {
         while (entityClass != null && processedEntityClasses.put(entityClass, true) == null) {
-
             for (Method m : entityClass.getDeclaredMethods()) {
                 for (Annotation a : m.getAnnotations()) {
                     AnnotationReader reader = this.getAnnotationsMap().get(a.annotationType().getName());
@@ -201,14 +174,34 @@ public class LifecycleCallbackRegistry {
                                     "Entity listener annotation should not contain 'entityAnnotations': " + m.getName());
                         }
 
-                        this.eventCallbacks[reader.eventType().ordinal()].addListener(entityClass, m.getName());
+                        this.eventCallbacks[reader.eventType().ordinal()].addListener(entityClass, m);
 
                     }
                 }
             }
-
-            entityClass = entityClass.getSuperclass();
+            for (Class c : entityClass.getInterfaces()) {
+                x(c);
+            }
+            x(entityClass.getSuperclass());
         }
+    }
+    /**
+     * Registers annotated methods of the entity class as callbacks for entity
+     * events.
+     *
+     * @since 3.2
+     */
+    public void addCallbacks(Class<?> entityClass) {
+        if (entityClass == null) {
+            throw new NullPointerException("Null entity class");
+        }
+
+        // Only process Persistent Objects
+        if (!Persistent.class.isAssignableFrom(entityClass)) {
+            throw new CayenneRuntimeException("Class not assignable from Entity");
+        }
+
+        x(entityClass);
 
     }
     
