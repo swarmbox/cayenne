@@ -14,6 +14,7 @@ Date:
 ----------------------------------
 Changes/New Features:
 
+CAY-1559 Use Lifecycle Annotations as markers on PersistentObject methods
 CAY-1626 Add JodaTime DateTime support
 CAY-1902 Implement resolving Db paths for DataObjects
 CAY-1991 More control over generated String property names
