@@ -123,12 +123,15 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
                     dbRelation = relation.getDbRelationships().get(0);
                 }
 
-                ObjectId targetId = (ObjectId) entry.getValue();
-                for (DbJoin join : dbRelation.getJoins()) {
-                    Object value = (targetId != null) ? new PropagatedValueFactory(targetId, join.getTargetName())
-                            : null;
+                // In case of a vertical inheritance, ensure that it belongs to this bucket...
+                if (dbRelation.getSourceEntity() == dbEntity) {
+                    ObjectId targetId = (ObjectId) entry.getValue();
+                    for (DbJoin join : dbRelation.getJoins()) {
+                        Object value = (targetId != null) ? new PropagatedValueFactory(targetId, join.getTargetName())
+                                : null;
 
-                    dbDiff.put(join.getSourceName(), value);
+                        dbDiff.put(join.getSourceName(), value);
+                    }
                 }
             }
         }
