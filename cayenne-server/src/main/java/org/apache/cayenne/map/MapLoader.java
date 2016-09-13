@@ -837,13 +837,9 @@ public class MapLoader extends DefaultHandler {
 			objEntity.setDeclaredLockType(ObjEntity.LOCK_TYPE_OPTIMISTIC);
 		}
 
-		String superEntityName = atts.getValue("", "superEntityName");
-		if (superEntityName != null) {
-			objEntity.setSuperEntityName(superEntityName);
-		} else {
-			objEntity.setSuperClassName(atts.getValue("", "superClassName"));
-			objEntity.setClientSuperClassName(atts.getValue("", "clientSuperClassName"));
-		}
+		objEntity.setSuperEntityName(atts.getValue("", "superEntityName"));
+		objEntity.setSuperClassName(atts.getValue("", "superClassName"));
+		objEntity.setClientSuperClassName(atts.getValue("", "clientSuperClassName"));
 
 		objEntity.setDbEntityName(atts.getValue("", "dbEntityName"));
 
