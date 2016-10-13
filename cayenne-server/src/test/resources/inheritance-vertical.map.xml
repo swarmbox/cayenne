@@ -65,6 +65,29 @@
 		<db-attribute name="ATTR1" type="VARCHAR" length="100" isMandatory="true"/>
 		<db-attribute name="OTHER_ID" type="INTEGER" isMandatory="true"/>
 	</db-entity>
+	<db-entity name="IV_STUDENT">
+		<db-attribute name="ID" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="NAME" type="VARCHAR" length="100"/>
+		<db-attribute name="FAVORITE_SHAPE_ID" type="INTEGER"/>
+	</db-entity>
+	<db-entity name="IV_COLOR">
+		<db-attribute name="ID" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="NAME" type="VARCHAR" length="100"/>
+	</db-entity>
+	<db-entity name="IV_SHAPE">
+		<db-attribute name="TYPE" type="CHAR" isMandatory="true" length="1"/>
+		<db-attribute name="ID" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="NAME" type="VARCHAR" length="100" isMandatory="true"/>
+		<db-attribute name="COLOR_ID" type="INTEGER"/>
+	</db-entity>
+	<db-entity name="IV_CIRCLE">
+		<db-attribute name="ID" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="RADIAS" type="INTEGER" isMandatory="true"/>
+	</db-entity>
+	<db-entity name="IV_SQUARE">
+		<db-attribute name="ID" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="SIDE_LENGTH" type="INTEGER" isMandatory="true"/>
+	</db-entity>
 	<obj-entity name="IvConcrete" superEntityName="IvAbstract" className="org.apache.cayenne.testdo.inheritance_vertical.IvConcrete">
 		<qualifier><![CDATA[type = "S"]]></qualifier>
 		<obj-attribute name="name" type="java.lang.String" db-attribute-path="concrete.NAME"/>
@@ -120,6 +143,24 @@
 	<obj-entity name="IvImpl" superEntityName="IvBase" className="org.apache.cayenne.testdo.inheritance_vertical.IvImpl">
 		<qualifier><![CDATA[type = "I"]]></qualifier>
 		<obj-attribute name="attr1" type="java.lang.String" db-attribute-path="impl.ATTR1"/>
+	</obj-entity>
+	<obj-entity name="IvStudent" className="org.apache.cayenne.testdo.inheritance_vertical.IvStudent" dbEntityName="IV_STUDENT">
+		<obj-attribute name="name" type="java.lang.String" db-attribute-path="NAME"/>
+	</obj-entity>
+	<obj-entity name="IvColor" className="org.apache.cayenne.testdo.inheritance_vertical.IvColor" dbEntityName="IV_COLOR">
+		<obj-attribute name="name" type="java.lang.String" db-attribute-path="NAME"/>
+	</obj-entity>
+	<obj-entity name="IvShape" abstract="true" className="org.apache.cayenne.testdo.inheritance_vertical.IvShape" dbEntityName="IV_SHAPE">
+		<obj-attribute name="type" type="java.lang.String" db-attribute-path="TYPE"/>
+		<obj-attribute name="name" type="java.lang.String" db-attribute-path="NAME"/>
+	</obj-entity>
+	<obj-entity name="IvCircle" superEntityName="IvShape" className="org.apache.cayenne.testdo.inheritance_vertical.IvCircle">
+		<qualifier><![CDATA[type = "C"]]></qualifier>
+		<obj-attribute name="radias" type="java.lang.Integer" db-attribute-path="circle.RADIAS"/>
+	</obj-entity>
+	<obj-entity name="IvSquare" superEntityName="IvShape" className="org.apache.cayenne.testdo.inheritance_vertical.IvSquare">
+		<qualifier><![CDATA[type = "S"]]></qualifier>
+		<obj-attribute name="sideLength" type="java.lang.Integer" db-attribute-path="square.SIDE_LENGTH"/>
 	</obj-entity>
 	<db-relationship name="abstract" source="IV_CONCRETE" target="IV_ABSTRACT" toMany="false">
 		<db-attribute-pair source="ID" target="ID"/>
@@ -181,9 +222,37 @@
 	<db-relationship name="impls" source="IV_OTHER" target="IV_IMPL" toMany="true">
 		<db-attribute-pair source="ID" target="OTHER_ID"/>
 	</db-relationship>
+	<db-relationship name="circle" source="IV_SHAPE" target="IV_CIRCLE" toDependentPK="true" toMany="false">
+		<db-attribute-pair source="ID" target="ID"/>
+	</db-relationship>
+	<db-relationship name="square" source="IV_SHAPE" target="IV_SQUARE" toDependentPK="true" toMany="false">
+		<db-attribute-pair source="ID" target="ID"/>
+	</db-relationship>
+	<db-relationship name="shape" source="IV_CIRCLE" target="IV_SHAPE" toMany="false">
+		<db-attribute-pair source="ID" target="ID"/>
+	</db-relationship>
+	<db-relationship name="shape" source="IV_SQUARE" target="IV_SHAPE" toMany="false">
+		<db-attribute-pair source="ID" target="ID"/>
+	</db-relationship>
+	<db-relationship name="color" source="IV_SHAPE" target="IV_COLOR" toMany="false">
+		<db-attribute-pair source="COLOR_ID" target="ID"/>
+	</db-relationship>
+	<db-relationship name="shapes" source="IV_COLOR" target="IV_SHAPE" toMany="true">
+		<db-attribute-pair source="ID" target="COLOR_ID"/>
+	</db-relationship>
+	<db-relationship name="favoriteShape" source="IV_STUDENT" target="IV_SHAPE" toMany="false">
+		<db-attribute-pair source="FAVORITE_SHAPE_ID" target="ID"/>
+	</db-relationship>
+	<db-relationship name="studentsWhoFavor" source="IV_SHAPE" target="IV_STUDENT" toMany="true">
+		<db-attribute-pair source="ID" target="FAVORITE_SHAPE_ID"/>
+	</db-relationship>
 	<obj-relationship name="x" source="Iv2Sub1" target="Iv2X" deleteRule="Nullify" db-relationship-path="sub1.x"/>
 	<obj-relationship name="parent" source="IvConcrete" target="IvConcrete" deleteRule="Nullify" db-relationship-path="parent"/>
 	<obj-relationship name="children" source="IvConcrete" target="IvConcrete" deleteRule="Deny" db-relationship-path="children"/>
 	<obj-relationship name="other" source="IvImpl" target="IvOther" deleteRule="Nullify" db-relationship-path="impl.other"/>
 	<obj-relationship name="impls" source="IvOther" target="IvImpl" deleteRule="Deny" db-relationship-path="impls.base"/>
+	<obj-relationship name="favoriteShape" source="IvStudent" target="IvShape" deleteRule="Nullify" db-relationship-path="favoriteShape"/>
+	<obj-relationship name="studentsWhoFavor" source="IvShape" target="IvStudent" deleteRule="Deny" db-relationship-path="studentsWhoFavor"/>
+	<obj-relationship name="color" source="IvShape" target="IvColor" deleteRule="Nullify" db-relationship-path="color"/>
+	<obj-relationship name="shapes" source="IvColor" target="IvShape" deleteRule="Deny" db-relationship-path="shapes"/>
 </data-map>
