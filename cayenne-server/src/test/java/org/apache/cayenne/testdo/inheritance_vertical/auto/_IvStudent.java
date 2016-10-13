@@ -30,7 +30,7 @@ public abstract class _IvStudent extends CayenneDataObject {
     }
 
     public void setFavoriteShape(IvShape favoriteShape) {
-        writeProperty("favoriteShape", favoriteShape);
+        setToOneTarget("favoriteShape", favoriteShape, true);
     }
     public IvShape getFavoriteShape() {
         return (IvShape)readProperty("favoriteShape");

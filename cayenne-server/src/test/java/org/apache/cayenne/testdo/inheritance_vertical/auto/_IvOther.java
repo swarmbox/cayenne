@@ -3,6 +3,7 @@ package org.apache.cayenne.testdo.inheritance_vertical.auto;
 import org.apache.cayenne.CayenneDataObject;
 import org.apache.cayenne.exp.Property;
 import org.apache.cayenne.testdo.inheritance_vertical.IvImpl;
+import org.apache.cayenne.testdo.inheritance_vertical.IvSquare;
 
 import java.util.List;
 
@@ -20,6 +21,7 @@ public abstract class _IvOther extends CayenneDataObject {
 
     public static final Property<String> NAME = new Property<String>("name");
     public static final Property<List<IvImpl>> IMPLS = new Property<List<IvImpl>>("impls");
+    public static final Property<List<IvSquare>> SQUARES = new Property<List<IvSquare>>("squares");
 
     public void setName(String name) {
         writeProperty("name", name);
@@ -37,6 +39,17 @@ public abstract class _IvOther extends CayenneDataObject {
     @SuppressWarnings("unchecked")
     public List<IvImpl> getImpls() {
         return (List<IvImpl>)readProperty("impls");
+    }
+
+    public void addToSquares(IvSquare obj) {
+        addToManyTarget("squares", obj, true);
+    }
+    public void removeFromSquares(IvSquare obj) {
+        removeToManyTarget("squares", obj, true);
+    }
+    @SuppressWarnings("unchecked")
+    public List<IvSquare> getSquares() {
+        return (List<IvSquare>)readProperty("squares");
     }
 
 }

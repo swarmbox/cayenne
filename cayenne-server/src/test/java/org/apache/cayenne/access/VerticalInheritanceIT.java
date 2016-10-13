@@ -35,10 +35,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static java.awt.Color.red;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static sun.management.snmp.jvminstr.JvmThreadInstanceEntryImpl.ThreadStateMap.Byte1.other;
 
 @UseServerRuntime(CayenneProjects.INHERITANCE_VERTICAL_PROJECT)
 public class VerticalInheritanceIT extends ServerCase {
@@ -555,6 +557,147 @@ public class VerticalInheritanceIT extends ServerCase {
 		impl.setOther(other);
 
 		context.commitChanges();
+	}
+
+	@Test
+	public void testSupportPolymorphicRelationshipsInsertAndAccess() {
+		//setup data
+		IvOther other = context.newObject(IvOther.class);
+		other.setName("Other");
+
+		IvStudent jack = context.newObject(IvStudent.class);
+		jack.setName("Jack");
+
+		IvStudent jill = context.newObject(IvStudent.class);
+		jill.setName("Jill");
+
+		IvColor red = context.newObject(IvColor.class);
+		red.setName("Red");
+
+		IvColor blue = context.newObject(IvColor.class);
+		blue.setName("Blue");
+
+		context.commitChanges();
+
+		// now relate them
+
+		IvSquare littleRedSquare = context.newObject(IvSquare.class);
+		littleRedSquare.setName("Little Red Square");
+		littleRedSquare.setColor(red);
+		littleRedSquare.setSideLength(3);
+		littleRedSquare.setOther(other);
+
+		IvSquare bigRedSquare = context.newObject(IvSquare.class);
+		bigRedSquare.setName("Big Red Square");
+		bigRedSquare.setColor(red);
+		bigRedSquare.setSideLength(300);
+		bigRedSquare.setOther(other);
+
+		IvSquare blueSquare = context.newObject(IvSquare.class);
+		blueSquare.setName("Blue Square");
+		blueSquare.setColor(blue);
+		blueSquare.setSideLength(8);
+		blueSquare.setOther(other);
+
+		IvCircle redCircle = context.newObject(IvCircle.class);
+		redCircle.setName("Red Circle");
+		redCircle.setColor(red);
+		redCircle.setRadius(4);
+
+		IvCircle blueCircle = context.newObject(IvCircle.class);
+		blueCircle.setName("Blue Circle");
+		blueCircle.setColor(blue);
+		blueCircle.setRadius(9);
+
+		jack.setFavoriteShape(littleRedSquare);
+		jill.setFavoriteShape(blueCircle);
+
+		context.commitChanges();
+
+		// access the polymorphic relationships
+
+		int redSquaresCount = 0;
+		int redCirclesCount = 0;
+
+		for(IvShape redShape : red.getShapes()) { // <-- Polymorphic ToMany
+			if (redShape instanceof IvSquare) {
+				redSquaresCount++;
+			} else if (redShape instanceof IvCircle) {
+				redCirclesCount++;
+			}
+		}
+
+		assertEquals(2, redSquaresCount);
+		assertEquals(1, redCirclesCount);
+
+		assertEquals(littleRedSquare, jack.getFavoriteShape()); // <-- Polymorphic ToOne
+
+	}
+
+	@Test
+	public void testSupportPolymorphicRelationshipsSelectAndAccess() throws Exception {
+		// Manual db inserts before we fetch them via Select
+		TableHelper otherTable = new TableHelper(dbHelper, "IV_OTHER");
+		otherTable.setColumns("ID", "NAME");
+
+		TableHelper colorTable = new TableHelper(dbHelper, "IV_COLOR");
+		colorTable.setColumns("ID", "NAME");
+
+		TableHelper shapeTable = new TableHelper(dbHelper, "IV_SHAPE");
+		shapeTable.setColumns("ID", "TYPE", "NAME", "COLOR_ID");
+
+		TableHelper circleTable = new TableHelper(dbHelper, "IV_CIRCLE");
+		circleTable.setColumns("ID", "RADIUS");
+
+		TableHelper squareTable = new TableHelper(dbHelper, "IV_SQUARE");
+		squareTable.setColumns("ID", "SIDE_LENGTH", "OTHER_ID");
+
+		TableHelper studentTable = new TableHelper(dbHelper, "IV_STUDENT");
+		studentTable.setColumns("ID", "NAME", "FAVORITE_SHAPE_ID");
+
+		// insert
+		otherTable.insert(1, "Other");
+
+		colorTable.insert(1, "Red");
+		colorTable.insert(2, "Blue");
+
+		shapeTable.insert(1, "S", "Little Red Square", 1);
+		shapeTable.insert(2, "S", "Big Red Square", 1);
+		shapeTable.insert(3, "S", "Blue Square", 2);
+		shapeTable.insert(4, "C", "Red Circle", 1);
+		shapeTable.insert(5, "C", "Blue Circle", 2);
+
+		squareTable.insert(1, 3, 1);
+		squareTable.insert(2, 300, 1);
+		squareTable.insert(3, 8, 1);
+
+		circleTable.insert(4, 4);
+		circleTable.insert(5, 9);
+
+		studentTable.insert(1, "Jack", 1);
+		studentTable.insert(2, "Jill", 5);
+
+		// Select and access the polymorphic relationships
+		IvColor red = context.selectOne(new SelectQuery<>(IvColor.class, IvColor.NAME.eq("Red")));
+		IvStudent jack = context.selectOne(new SelectQuery<>(IvStudent.class, IvStudent.NAME.eq("Jack")));
+
+		int redSquaresCount = 0;
+		int redCirclesCount = 0;
+
+		for(IvShape redShape : red.getShapes()) { // <-- Polymorphic ToMany
+			if (redShape instanceof IvSquare) {
+				redSquaresCount++;
+			} else if (redShape instanceof IvCircle) {
+				redCirclesCount++;
+			}
+		}
+
+		assertEquals(2, redSquaresCount);
+		assertEquals(1, redCirclesCount);
+
+		assertEquals("Little Red Square", jack.getFavoriteShape().getName()); // <-- Polymorphic ToOne
+		assertEquals(IvSquare.class, jack.getFavoriteShape().getClass());
+
 	}
 
 }

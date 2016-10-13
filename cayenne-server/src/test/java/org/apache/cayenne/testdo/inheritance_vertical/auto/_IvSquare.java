@@ -1,6 +1,7 @@
 package org.apache.cayenne.testdo.inheritance_vertical.auto;
 
 import org.apache.cayenne.exp.Property;
+import org.apache.cayenne.testdo.inheritance_vertical.IvOther;
 import org.apache.cayenne.testdo.inheritance_vertical.IvShape;
 
 /**
@@ -16,6 +17,7 @@ public abstract class _IvSquare extends IvShape {
     public static final String ID_PK_COLUMN = "ID";
 
     public static final Property<Integer> SIDE_LENGTH = new Property<Integer>("sideLength");
+    public static final Property<IvOther> OTHER = new Property<IvOther>("other");
 
     public void setSideLength(Integer sideLength) {
         writeProperty("sideLength", sideLength);
@@ -24,5 +26,12 @@ public abstract class _IvSquare extends IvShape {
         return (Integer)readProperty("sideLength");
     }
 
+    public void setOther(IvOther other) {
+        setToOneTarget("other", other, true);
+    }
+
+    public IvOther getOther() {
+        return (IvOther)readProperty("other");
+    }
 
 }

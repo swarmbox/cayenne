@@ -40,7 +40,7 @@ public abstract class _IvShape extends CayenneDataObject {
     }
 
     public void setColor(IvColor color) {
-        writeProperty("color", color);
+        setToOneTarget("color", color, true);
     }
     public IvColor getColor() {
         return (IvColor)readProperty("color");

@@ -15,13 +15,13 @@ public abstract class _IvCircle extends IvShape {
 
     public static final String ID_PK_COLUMN = "ID";
 
-    public static final Property<Integer> RADIAS = new Property<Integer>("radias");
+    public static final Property<Integer> RADIUS = new Property<Integer>("radius");
 
-    public void setRadias(Integer radias) {
-        writeProperty("radias", radias);
+    public void setRadius(Integer radius) {
+        writeProperty("radius", radius);
     }
-    public Integer getRadias() {
-        return (Integer)readProperty("radias");
+    public Integer getRadius() {
+        return (Integer)readProperty("radius");
     }
 
 }
