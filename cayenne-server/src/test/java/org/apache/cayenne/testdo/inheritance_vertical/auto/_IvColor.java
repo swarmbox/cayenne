@@ -2,6 +2,7 @@ package org.apache.cayenne.testdo.inheritance_vertical.auto;
 
 import org.apache.cayenne.CayenneDataObject;
 import org.apache.cayenne.exp.Property;
+import org.apache.cayenne.testdo.inheritance_vertical.IvCircle;
 import org.apache.cayenne.testdo.inheritance_vertical.IvShape;
 
 import java.util.List;
@@ -20,6 +21,7 @@ public abstract class _IvColor extends CayenneDataObject {
 
     public static final Property<String> NAME = new Property<String>("name");
     public static final Property<List<IvShape>> SHAPES = new Property<List<IvShape>>("shapes");
+    public static final Property<IvCircle> DEFAULT_CIRCLE = new Property<IvCircle>("defaultCircle");
 
     public void setName(String name) {
         writeProperty("name", name);
@@ -37,6 +39,13 @@ public abstract class _IvColor extends CayenneDataObject {
     @SuppressWarnings("unchecked")
     public List<IvShape> getShapes() {
         return (List<IvShape>)readProperty("shapes");
+    }
+
+    public void setDefaultCircle(IvCircle defaultCircle) {
+        setToOneTarget("defaultCircle", defaultCircle, true);
+    }
+    public IvCircle getDefaultCircle() {
+        return (IvCircle)readProperty("defaultCircle");
     }
 
 }

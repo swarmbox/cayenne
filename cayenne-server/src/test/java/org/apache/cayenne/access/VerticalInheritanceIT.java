@@ -35,12 +35,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static java.awt.Color.red;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static sun.management.snmp.jvminstr.JvmThreadInstanceEntryImpl.ThreadStateMap.Byte1.other;
+import static org.junit.Assert.*;
 
 @UseServerRuntime(CayenneProjects.INHERITANCE_VERTICAL_PROJECT)
 public class VerticalInheritanceIT extends ServerCase {
@@ -641,7 +636,7 @@ public class VerticalInheritanceIT extends ServerCase {
 		otherTable.setColumns("ID", "NAME");
 
 		TableHelper colorTable = new TableHelper(dbHelper, "IV_COLOR");
-		colorTable.setColumns("ID", "NAME");
+		colorTable.setColumns("ID", "NAME", "DEFAULT_CIRCLE_ID");
 
 		TableHelper shapeTable = new TableHelper(dbHelper, "IV_SHAPE");
 		shapeTable.setColumns("ID", "TYPE", "NAME", "COLOR_ID");
@@ -658,8 +653,8 @@ public class VerticalInheritanceIT extends ServerCase {
 		// insert
 		otherTable.insert(1, "Other");
 
-		colorTable.insert(1, "Red");
-		colorTable.insert(2, "Blue");
+		colorTable.insert(1, "Red", null);
+		colorTable.insert(2, "Blue", null);
 
 		shapeTable.insert(1, "S", "Little Red Square", 1);
 		shapeTable.insert(2, "S", "Big Red Square", 1);
@@ -698,6 +693,95 @@ public class VerticalInheritanceIT extends ServerCase {
 		assertEquals("Little Red Square", jack.getFavoriteShape().getName()); // <-- Polymorphic ToOne
 		assertEquals(IvSquare.class, jack.getFavoriteShape().getClass());
 
+	}
+
+	@Test
+	public void testSupportFlattenedBelongsToVerticalImplementationForInsert() throws Exception {
+		//setup data
+		IvColor red = context.newObject(IvColor.class);
+		red.setName("Red");
+
+		IvCircle redCircle = context.newObject(IvCircle.class);
+		redCircle.setName("Red Circle");
+		redCircle.setColor(red);
+		redCircle.setRadius(4);
+
+		red.setDefaultCircle(redCircle);
+
+		context.commitChanges();
+
+		// access the relationship
+		assertEquals(redCircle, red.getDefaultCircle()); // <-- ToOne Vertical Implementation
+	}
+
+	@Test
+	public void testSupportFlattenedBelongsToVerticalImplementationForUpdate() throws Exception {
+		// Manual db inserts before we fetch them via Select
+		TableHelper colorTable = new TableHelper(dbHelper, "IV_COLOR");
+		colorTable.setColumns("ID", "NAME", "DEFAULT_CIRCLE_ID");
+
+		TableHelper shapeTable = new TableHelper(dbHelper, "IV_SHAPE");
+		shapeTable.setColumns("ID", "TYPE", "NAME", "COLOR_ID");
+
+		TableHelper circleTable = new TableHelper(dbHelper, "IV_CIRCLE");
+		circleTable.setColumns("ID", "RADIUS");
+
+		// insert
+		colorTable.insert(1, "Red", null);
+
+		shapeTable.insert(1, "C", "Little Red Circle", 1);
+		shapeTable.insert(2, "C", "Big Red Circle", 1);
+
+		circleTable.insert(1, 4);
+		circleTable.insert(2, 40);
+
+		// Select and change relationship from null to littleRedCircle
+		IvColor red = context.selectOne(new SelectQuery<>(IvColor.class, IvColor.NAME.eq("Red")));
+		IvCircle littleRedCircle = context.selectOne(new SelectQuery<>(IvCircle.class, IvCircle.NAME.eq("Little Red Circle")));
+
+		red.setDefaultCircle(littleRedCircle);
+
+		context.commitChanges(); // this is incorrectly trying to perform an insert instead of update
+
+		// Select and change relationship from littleRedCircle to bigRedCircle
+		IvCircle bigRedCircle = context.selectOne(new SelectQuery<>(IvCircle.class, IvCircle.NAME.eq("Big Red Circle")));
+
+		red.setDefaultCircle(bigRedCircle);
+
+		context.commitChanges();
+	}
+
+	@Test
+	public void testSupportFlattenedBelongsToVerticalImplementationForDelete() throws Exception {
+		// Manual db inserts before we fetch them via Select
+		TableHelper colorTable = new TableHelper(dbHelper, "IV_COLOR");
+		colorTable.setColumns("ID", "NAME", "DEFAULT_CIRCLE_ID");
+
+		TableHelper shapeTable = new TableHelper(dbHelper, "IV_SHAPE");
+		shapeTable.setColumns("ID", "TYPE", "NAME", "COLOR_ID");
+
+		TableHelper circleTable = new TableHelper(dbHelper, "IV_CIRCLE");
+		circleTable.setColumns("ID", "RADIUS");
+
+		// insert
+		colorTable.insert(1, "Red", null);
+
+		shapeTable.insert(1, "C", "Red Circle", 1);
+
+		circleTable.insert(1, 4);
+
+		colorTable.update().set("DEFAULT_CIRCLE_ID", 1).where("ID", 1).execute();
+
+		assertNotNull(context.selectOne(new SelectQuery<>(IvCircle.class, IvCircle.NAME.eq("Red Circle"))));
+
+		// Select and access the polymorphic relationships
+		IvColor red = context.selectOne(new SelectQuery<>(IvColor.class, IvColor.NAME.eq("Red")));
+
+		red.setDefaultCircle(null);
+
+		context.commitChanges(); // this is incorrectly deleting the Red Circle
+
+		assertNotNull(context.selectOne(new SelectQuery<>(IvCircle.class, IvCircle.NAME.eq("Red Circle"))));
 	}
 
 }
