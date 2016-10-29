@@ -105,18 +105,22 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
         if (currentArcDiff != null) {
             for (Entry<Object, Object> entry : currentArcDiff.entrySet()) {
 
-                DbRelationship dbRelation;
+                DbRelationship dbRelation = null;
 
                 String arcIdString = entry.getKey().toString();
                 ObjRelationship relation = objEntity.getRelationship(arcIdString);
                 if (relation == null) {
                     dbRelation = dbEntity.getRelationship(arcIdString.substring(ASTDbPath.DB_PREFIX.length()));
                 } else {
-                    dbRelation = relation.getDbRelationships().get(0);
+                    for (DbRelationship _dbRelation : relation.getDbRelationships()) {
+                        if (_dbRelation.getSourceEntity().equals(dbEntity)) {
+                            dbRelation = _dbRelation;
+                            break;
+                        }
+                    }
                 }
 
-                // In case of a vertical inheritance, ensure that it belongs to this bucket...
-                if (dbRelation.getSourceEntity() == dbEntity) {
+                if (dbRelation!=null) {  //TODO If no DB relation was found should we throw an exception?
                     ObjectId targetId = (ObjectId) entry.getValue();
                     for (DbJoin join : dbRelation.getJoins()) {
                         Object value = (targetId != null) ? new PropagatedValueFactory(targetId, join.getTargetName())
@@ -171,7 +175,9 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
                 throw new IllegalArgumentException("Bad arcId: " + arcId);
             }
 
-        } else if (!relationship.isSourceIndependentFromTargetChange()) {
+        } else if (!relationship.isSourceIndependentFromTargetChange() ||
+                (objEntity.getSuperEntity()!=null && dbEntity!=objEntity.getDbEntity() && relationship.getDbRelationships().get(1).isToPK()) ||
+                (relationship.getTargetEntity().getSuperEntity()!=null && relationship.getDbRelationships().get(0).isToPK())) {
             doArcCreated(targetNodeId, arcId);
         }
     }
