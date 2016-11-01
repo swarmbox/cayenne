@@ -113,6 +113,7 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
                     dbRelation = dbEntity.getRelationship(arcIdString.substring(ASTDbPath.DB_PREFIX.length()));
                 } else {
                     for (DbRelationship _dbRelation : relation.getDbRelationships()) {
+                        // In case of a vertical inheritance, ensure that it belongs to this bucket...
                         if (_dbRelation.getSourceEntity().equals(dbEntity)) {
                             dbRelation = _dbRelation;
                             break;
@@ -120,7 +121,7 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
                     }
                 }
 
-                if (dbRelation!=null) {  //TODO If no DB relation was found should we throw an exception?
+                if (dbRelation!=null) {
                     ObjectId targetId = (ObjectId) entry.getValue();
                     for (DbJoin join : dbRelation.getJoins()) {
                         Object value = (targetId != null) ? new PropagatedValueFactory(targetId, join.getTargetName())
@@ -176,7 +177,8 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
             }
 
         } else if (!relationship.isSourceIndependentFromTargetChange() ||
-                (objEntity.getSuperEntity()!=null && dbEntity!=objEntity.getDbEntity() && relationship.getDbRelationships().get(1).isToPK()) ||
+                //TODO Try to make these conditions cleaner
+                (relationship.getSourceEntity().getSuperEntity()!=null && dbEntity!=objEntity.getDbEntity() && relationship.getDbRelationships().get(1).isToPK()) ||
                 (relationship.getTargetEntity().getSuperEntity()!=null && relationship.getDbRelationships().get(0).isToPK())) {
             doArcCreated(targetNodeId, arcId);
         }

@@ -85,7 +85,7 @@ final class DataDomainIndirectDiffBuilder implements GraphChangeHandler {
                 indirectModifications.add(nodeObjectId);
             }
 
-            if (relationship.isFlattened()) {
+            if (relationship.isFlattened() && !relationship.hasSubEntity()) { //FIX This breaks single table inheritance many-to-manys
                 if (relationship.isReadOnly()) {
                     throw new CayenneRuntimeException("Cannot set the read-only flattened relationship '"
                             + relationship.getName() + "' in ObjEntity '" + relationship.getSourceEntity().getName()
@@ -119,7 +119,7 @@ final class DataDomainIndirectDiffBuilder implements GraphChangeHandler {
                 indirectModifications.add(nodeObjectId);
             }
 
-            if (relationship.isFlattened()) {
+            if (relationship.isFlattened() && !relationship.hasSubEntity()) { //FIX This breaks single table inheritance many-to-manys
                 if (relationship.isReadOnly()) {
                     throw new CayenneRuntimeException("Cannot unset the read-only flattened relationship "
                             + relationship.getName());

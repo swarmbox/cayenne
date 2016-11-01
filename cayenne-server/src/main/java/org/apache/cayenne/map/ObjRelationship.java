@@ -431,6 +431,13 @@ public class ObjRelationship extends Relationship implements ConfigurationNode {
         return readOnly;
     }
 
+    /**
+     * Returns true if the source or target entity inherits from a super entity.
+     */
+    public boolean hasSubEntity() {
+        return getSourceEntity().getSuperEntity()!=null || getTargetEntity().getSuperEntity()!=null;
+    }
+
     @Override
     public boolean isToMany() {
         refreshFromDeferredPath();
@@ -684,15 +691,15 @@ public class ObjRelationship extends Relationship implements ConfigurationNode {
      * DbRelationships.
      */
     public void recalculateReadOnlyValue() {
-        // not flattened, always read/write
-        if (dbRelationships.size() < 2) {
-            this.readOnly = false;
-            return;
-        }
-
         // too long, can't handle this yet
         if (dbRelationships.size() > 2) {
             this.readOnly = true;
+            return;
+        }
+
+        // not flattened or 1-step inherited relationship: always read/write
+        if (dbRelationships.size() < 2 || hasSubEntity()) {
+            this.readOnly = false;
             return;
         }
 
