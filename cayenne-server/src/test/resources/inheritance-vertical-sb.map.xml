@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-map xmlns="http://cayenne.apache.org/schema/8/modelMap"
+	 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	 xsi:schemaLocation="http://cayenne.apache.org/schema/8/modelMap http://cayenne.apache.org/schema/8/modelMap.xsd"
+	 project-version="8">
+	<property name="defaultPackage" value="org.apache.cayenne.testdo.inheritance_vertical_sb"/>
+	<db-entity name="iv_agronomist">
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="person_id" type="INTEGER"/>
+		<db-attribute name="plants_planted" type="INTEGER"/>
+	</db-entity>
+	<db-entity name="iv_drivers_license">
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="reference" type="VARCHAR" length="100"/>
+	</db-entity>
+	<db-entity name="iv_email">
+		<db-attribute name="address" type="VARCHAR" length="100"/>
+		<db-attribute name="entity_id" type="INTEGER"/>
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+	</db-entity>
+	<db-entity name="iv_entity">
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="reference" type="VARCHAR" length="100"/>
+		<db-attribute name="type" type="CHAR" isMandatory="true" length="1"/>
+	</db-entity>
+	<db-entity name="iv_family">
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="last_name" type="VARCHAR" length="100"/>
+	</db-entity>
+	<db-entity name="iv_person">
+		<db-attribute name="drivers_license_id" type="INTEGER"/>
+		<db-attribute name="family_id" type="INTEGER"/>
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="name" type="VARCHAR" length="100"/>
+	</db-entity>
+	<obj-entity name="IvAgronomist" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvAgronomist" dbEntityName="iv_agronomist">
+		<obj-attribute name="plantsPlanted" type="int" db-attribute-path="plants_planted"/>
+	</obj-entity>
+	<obj-entity name="IvDriversLicense" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvDriversLicense" dbEntityName="iv_drivers_license">
+		<obj-attribute name="reference" type="java.lang.String" db-attribute-path="reference"/>
+	</obj-entity>
+	<obj-entity name="IvEmail" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvEmail" dbEntityName="iv_email">
+		<obj-attribute name="address" type="java.lang.String" db-attribute-path="address"/>
+	</obj-entity>
+	<obj-entity name="IvEntity" abstract="true" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvEntity" dbEntityName="iv_entity">
+		<obj-attribute name="reference" type="java.lang.String" db-attribute-path="reference"/>
+		<obj-attribute name="type" type="java.lang.String" db-attribute-path="type"/>
+	</obj-entity>
+	<obj-entity name="IvFamily" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvFamily" dbEntityName="iv_family">
+		<obj-attribute name="lastName" type="java.lang.String" db-attribute-path="last_name"/>
+	</obj-entity>
+	<obj-entity name="IvPerson" superEntityName="IvEntity" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvPerson">
+		<qualifier><![CDATA[type = "P"]]></qualifier>
+		<obj-attribute name="name" type="java.lang.String" db-attribute-path="person.name"/>
+	</obj-entity>
+	<db-relationship name="person" source="iv_agronomist" target="iv_person" toMany="false">
+		<db-attribute-pair source="person_id" target="id"/>
+	</db-relationship>
+	<db-relationship name="person" source="iv_drivers_license" target="iv_person" toMany="false">
+		<db-attribute-pair source="id" target="drivers_license_id"/>
+	</db-relationship>
+	<db-relationship name="entity" source="iv_email" target="iv_entity" toMany="false">
+		<db-attribute-pair source="entity_id" target="id"/>
+	</db-relationship>
+	<db-relationship name="emails" source="iv_entity" target="iv_email" toMany="true">
+		<db-attribute-pair source="id" target="entity_id"/>
+	</db-relationship>
+	<db-relationship name="person" source="iv_entity" target="iv_person" toDependentPK="true" toMany="false">
+		<db-attribute-pair source="id" target="id"/>
+	</db-relationship>
+	<db-relationship name="people" source="iv_family" target="iv_person" toMany="true">
+		<db-attribute-pair source="id" target="family_id"/>
+	</db-relationship>
+	<db-relationship name="agronomist" source="iv_person" target="iv_agronomist" toMany="false">
+		<db-attribute-pair source="id" target="person_id"/>
+	</db-relationship>
+	<db-relationship name="driversLicense" source="iv_person" target="iv_drivers_license" toMany="false">
+		<db-attribute-pair source="drivers_license_id" target="id"/>
+	</db-relationship>
+	<db-relationship name="entity" source="iv_person" target="iv_entity" toMany="false">
+		<db-attribute-pair source="id" target="id"/>
+	</db-relationship>
+	<db-relationship name="family" source="iv_person" target="iv_family" toMany="false">
+		<db-attribute-pair source="family_id" target="id"/>
+	</db-relationship>
+	<obj-relationship name="person" source="IvAgronomist" target="IvPerson" deleteRule="Nullify" db-relationship-path="person.entity"/>
+	<obj-relationship name="person" source="IvDriversLicense" target="IvPerson" deleteRule="Nullify" db-relationship-path="person.entity"/>
+	<obj-relationship name="entity" source="IvEmail" target="IvEntity" deleteRule="Nullify" db-relationship-path="entity"/>
+	<obj-relationship name="emails" source="IvEntity" target="IvEmail" deleteRule="Deny" db-relationship-path="emails"/>
+	<obj-relationship name="people" source="IvFamily" target="IvPerson" deleteRule="Deny" db-relationship-path="people.entity"/>
+	<obj-relationship name="agronomist" source="IvPerson" target="IvAgronomist" deleteRule="Deny" db-relationship-path="person.agronomist"/>
+	<obj-relationship name="driversLicense" source="IvPerson" target="IvDriversLicense" deleteRule="Nullify" db-relationship-path="person.driversLicense"/>
+	<obj-relationship name="family" source="IvPerson" target="IvFamily" deleteRule="Nullify" db-relationship-path="person.family"/>
+</data-map>

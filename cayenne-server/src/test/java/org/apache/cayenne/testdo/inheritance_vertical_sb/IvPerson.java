@@ -1,8 +1,8 @@
 package org.apache.cayenne.testdo.inheritance_vertical_sb;
 
-import org.apache.cayenne.testdo.inheritance_vertical_sb.auto._Family;
+import org.apache.cayenne.testdo.inheritance_vertical_sb.auto._IvPerson;
 
-public class Family extends _Family {
+public class IvPerson extends _IvPerson {
 
     private static final long serialVersionUID = 1L; 
 

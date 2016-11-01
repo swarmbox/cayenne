@@ -23,22 +23,16 @@ import org.apache.cayenne.di.Inject;
 import org.apache.cayenne.query.SelectQuery;
 import org.apache.cayenne.test.jdbc.DBHelper;
 import org.apache.cayenne.test.jdbc.TableHelper;
-import org.apache.cayenne.testdo.inheritance_vertical_sb.Agronomist;
-import org.apache.cayenne.testdo.inheritance_vertical_sb.DriversLicense;
-import org.apache.cayenne.testdo.inheritance_vertical_sb.Family;
-import org.apache.cayenne.testdo.inheritance_vertical_sb.Person;
-import org.apache.cayenne.unit.di.server.CayenneProjects;
+import org.apache.cayenne.testdo.inheritance_vertical_sb.*;
 import org.apache.cayenne.unit.di.server.ServerCase;
 import org.apache.cayenne.unit.di.server.UseServerRuntime;
 import org.junit.Test;
 
 import java.sql.SQLException;
-import java.sql.Types;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import static org.junit.Assert.*;
+
+//TODO Rename all tables to something more generalized
 
 @UseServerRuntime("cayenne-inheritance-vertical-sb.xml")
 public class VerticalInheritanceSB extends ServerCase {
@@ -49,23 +43,23 @@ public class VerticalInheritanceSB extends ServerCase {
 	@Inject
 	protected DBHelper dbHelper;
 
+	private static final int DEFAULT_PERSON_ID = 1;
+	private static final String DEFAULT_PERSON_REFERENCE = "p1";
+	private static final String DEFAULT_PERSON_NAME = "John";
+
 	@Test
 	public void testPersonOneToManyUpdate() throws Exception {
-		TableHelper entityTable = new TableHelper(dbHelper, "entity");
-		entityTable.setColumns("id", "reference", "type");
+		setupDefaultPerson();
 
-		TableHelper personTable = new TableHelper(dbHelper, "person");
-		personTable.setColumns("id", "name");
+		TableHelper personTable = new TableHelper(dbHelper, "iv_person");
 
-		TableHelper familyTable = new TableHelper(dbHelper, "family");
+		TableHelper familyTable = new TableHelper(dbHelper, "iv_family");
 		familyTable.setColumns("id", "last_name");
 
-		entityTable.insert(1, "p1", "P");
-		personTable.insert(1, "Doug");
-		familyTable.insert(5, "Stuart");
+		familyTable.insert(5, "Smith");
 
-		Person person = context.selectOne(new SelectQuery<>(Person.class, Person.NAME.eq("Doug")));
-		Family family = context.selectOne(new SelectQuery<>(Family.class, Family.LAST_NAME.eq("Stuart")));
+		IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+		IvFamily family = context.selectOne(new SelectQuery<>(IvFamily.class));
 
 		person.setFamily(family);
 
@@ -77,21 +71,17 @@ public class VerticalInheritanceSB extends ServerCase {
 
 	@Test
 	public void testPersonHasFKOneToOneUpdateFromPerson() throws Exception { //Person has FK to drivers_license
-		TableHelper entityTable = new TableHelper(dbHelper, "entity");
-		entityTable.setColumns("id", "reference", "type");
+		setupDefaultPerson();
 
-		TableHelper personTable = new TableHelper(dbHelper, "person");
-		personTable.setColumns("id", "name");
+		TableHelper personTable = new TableHelper(dbHelper, "iv_person");
 
-		TableHelper driversLicenseTable = new TableHelper(dbHelper, "drivers_license");
+		TableHelper driversLicenseTable = new TableHelper(dbHelper, "iv_drivers_license");
 		driversLicenseTable.setColumns("id", "reference");
 
-		entityTable.insert(1, "p1", "P");
-		personTable.insert(1, "Doug");
 		driversLicenseTable.insert(5, "123ABC");
 
-		Person person = context.selectOne(new SelectQuery<>(Person.class, Person.NAME.eq("Doug")));
-		DriversLicense dl = context.selectOne(new SelectQuery<>(DriversLicense.class, DriversLicense.REFERENCE.eq("123ABC")));
+		IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+		IvDriversLicense dl = context.selectOne(new SelectQuery<>(IvDriversLicense.class));
 
 		person.setDriversLicense(dl);
 
@@ -103,21 +93,17 @@ public class VerticalInheritanceSB extends ServerCase {
 
 	@Test
 	public void testPersonHasFKOneToOneUpdateFromDriversLicense() throws Exception {
-		TableHelper entityTable = new TableHelper(dbHelper, "entity");
-		entityTable.setColumns("id", "reference", "type");
+		setupDefaultPerson();
 
-		TableHelper personTable = new TableHelper(dbHelper, "person");
-		personTable.setColumns("id", "name");
+		TableHelper personTable = new TableHelper(dbHelper, "iv_person");
 
-		TableHelper driversLicenseTable = new TableHelper(dbHelper, "drivers_license");
+		TableHelper driversLicenseTable = new TableHelper(dbHelper, "iv_drivers_license");
 		driversLicenseTable.setColumns("id", "reference");
 
-		entityTable.insert(1, "p1", "P");
-		personTable.insert(1, "Doug");
 		driversLicenseTable.insert(5, "123ABC");
 
-		Person person = context.selectOne(new SelectQuery<>(Person.class, Person.NAME.eq("Doug")));
-		DriversLicense dl = context.selectOne(new SelectQuery<>(DriversLicense.class, DriversLicense.REFERENCE.eq("123ABC")));
+		IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+		IvDriversLicense dl = context.selectOne(new SelectQuery<>(IvDriversLicense.class));
 
 		dl.setPerson(person);
 
@@ -129,21 +115,15 @@ public class VerticalInheritanceSB extends ServerCase {
 
 	@Test
 	public void testPersonOneToOneUpdateFromAgronomist() throws Exception { //Agronomist has FK to person
-		TableHelper entityTable = new TableHelper(dbHelper, "entity");
-		entityTable.setColumns("id", "reference", "type");
+		setupDefaultPerson();
 
-		TableHelper personTable = new TableHelper(dbHelper, "person");
-		personTable.setColumns("id", "name");
-
-		TableHelper agronomistTable = new TableHelper(dbHelper, "agronomist");
+		TableHelper agronomistTable = new TableHelper(dbHelper, "iv_agronomist");
 		agronomistTable.setColumns("id", "plants_planted");
 
-		entityTable.insert(1, "p1", "P");
-		personTable.insert(1, "Doug");
 		agronomistTable.insert(5, 100);
 
-		Person person = context.selectOne(new SelectQuery<>(Person.class, Person.NAME.eq("Doug")));
-		Agronomist agronomist = context.selectOne(new SelectQuery<>(Agronomist.class, Agronomist.PLANTS_PLANTED.eq(100)));
+		IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+		IvAgronomist agronomist = context.selectOne(new SelectQuery<>(IvAgronomist.class));
 
 		agronomist.setPerson(person);
 
@@ -155,21 +135,15 @@ public class VerticalInheritanceSB extends ServerCase {
 
 	@Test
 	public void testPersonOneToOneUpdateFromPerson() throws Exception { //Agronomist has FK to person
-		TableHelper entityTable = new TableHelper(dbHelper, "entity");
-		entityTable.setColumns("id", "reference", "type");
+		setupDefaultPerson();
 
-		TableHelper personTable = new TableHelper(dbHelper, "person");
-		personTable.setColumns("id", "name");
-
-		TableHelper agronomistTable = new TableHelper(dbHelper, "agronomist");
+		TableHelper agronomistTable = new TableHelper(dbHelper, "iv_agronomist");
 		agronomistTable.setColumns("id", "plants_planted");
 
-		entityTable.insert(1, "p1", "P");
-		personTable.insert(1, "Doug");
 		agronomistTable.insert(5, 100);
 
-		Person person = context.selectOne(new SelectQuery<>(Person.class, Person.NAME.eq("Doug")));
-		Agronomist agronomist = context.selectOne(new SelectQuery<>(Agronomist.class, Agronomist.PLANTS_PLANTED.eq(100)));
+		IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+		IvAgronomist agronomist = context.selectOne(new SelectQuery<>(IvAgronomist.class));
 
 		person.setAgronomist(agronomist);
 
@@ -177,6 +151,38 @@ public class VerticalInheritanceSB extends ServerCase {
 
 		assertEquals(agronomist.getPerson(), person);
 		assertEquals(agronomistTable.getInt("person_id"), 1);
+	}
+	@Test
+	public void testAbstractHasInheritance() throws Exception { //TODO May be redundant with test from another inheritance suite.
+		setupDefaultPerson();
+
+
+
+		TableHelper emailTable = new TableHelper(dbHelper, "iv_email");
+		emailTable.setColumns("id", "address");
+
+		emailTable.insert(5, "a@b.com");
+
+		IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+		IvEmail email = context.selectOne(new SelectQuery<>(IvEmail.class));
+
+		email.setEntity(person);
+
+		context.commitChanges();
+
+		assertEquals(email.getEntity(), person);
+		assertEquals(emailTable.getInt("entity_id"), 1);
+	}
+
+	private void setupDefaultPerson() throws SQLException {
+		TableHelper entityTable = new TableHelper(dbHelper, "iv_entity");
+		entityTable.setColumns("id", "reference", "type");
+
+		TableHelper personTable = new TableHelper(dbHelper, "iv_person");
+		personTable.setColumns("id", "name");
+
+		entityTable.insert(DEFAULT_PERSON_ID, DEFAULT_PERSON_REFERENCE, "P");
+		personTable.insert(DEFAULT_PERSON_ID, DEFAULT_PERSON_NAME);
 	}
 
 	//TODO Test creating obj that starts with inheritance relationship
