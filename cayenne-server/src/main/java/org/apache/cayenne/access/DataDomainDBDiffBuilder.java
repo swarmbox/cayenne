@@ -159,6 +159,29 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
         currentPropertyDiff.put(property, newValue);
     }
 
+
+    private boolean isInherited1(ObjRelationship relationship) { //TODO Rename or put logic back in arcCreated
+        return relationship.getSourceEntity().getSuperEntity() == null && relationship.getDbRelationships().get(0).isToPK();
+    }
+
+    private boolean isInherited2(ObjRelationship relationship) { //TODO Rename or put logic back in arcCreated
+        if (relationship.getSourceEntity().getSuperEntity() == null) {
+            return false;
+        }
+
+        DbRelationship targetDbRelationship = null;
+        for (DbRelationship dbRelationship : relationship.getDbRelationships()) {
+            if (dbRelationship.isToMany()) {
+                return false;
+            }
+
+            if (!dbRelationship.isFromPK()) {
+                return dbEntity == dbRelationship.getSourceEntity();
+            }
+         }
+        return false;
+    }
+
     public void arcCreated(Object nodeId, Object targetNodeId, Object arcId) {
         String arcIdString = arcId.toString();
         ObjRelationship relationship = objEntity.getRelationship(arcIdString);
@@ -176,10 +199,9 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
                 throw new IllegalArgumentException("Bad arcId: " + arcId);
             }
 
-        } else if (!relationship.isSourceIndependentFromTargetChange() ||
-                //TODO Try to make these conditions cleaner
-                (relationship.getSourceEntity().getSuperEntity()!=null && dbEntity!=objEntity.getDbEntity() && relationship.getDbRelationships().get(1).isToPK()) ||
-                (relationship.getTargetEntity().getSuperEntity()!=null && relationship.getDbRelationships().get(0).isToPK())) {
+        } else if (!relationship.isSourceIndependentFromTargetChange()) {
+            doArcCreated(targetNodeId, arcId);
+        } else if (isInherited1(relationship) || isInherited2(relationship)) {
             doArcCreated(targetNodeId, arcId);
         }
     }
