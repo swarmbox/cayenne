@@ -18,6 +18,7 @@
  ****************************************************************/
 package org.apache.cayenne.access;
 
+import org.apache.cayenne.Cayenne;
 import org.apache.cayenne.ObjectContext;
 import org.apache.cayenne.di.Inject;
 import org.apache.cayenne.query.SelectQuery;
@@ -131,7 +132,7 @@ public class VerticalInheritanceSB extends ServerCase {
 		context.commitChanges();
 
 		assertEquals(agronomist.getPerson(), person);
-		assertEquals(1, agronomistTable.getInt("person_id"));
+		assertEquals(DEFAULT_PERSON_ID, agronomistTable.getInt("person_id"));
 	}
 
 	@Test
@@ -151,7 +152,7 @@ public class VerticalInheritanceSB extends ServerCase {
 		context.commitChanges();
 
 		assertEquals(agronomist.getPerson(), person);
-		assertEquals(1, agronomistTable.getInt("person_id"));
+		assertEquals(DEFAULT_PERSON_ID, agronomistTable.getInt("person_id"));
 	}
 
     @Test
@@ -201,7 +202,7 @@ public class VerticalInheritanceSB extends ServerCase {
         context.commitChanges();
 
         assertEquals(receipt.getPerson(), person);
-        assertEquals(1, receiptTable.getInt("person_id"));
+        assertEquals(DEFAULT_PERSON_ID, receiptTable.getInt("person_id"));
     }
 
     @Test
@@ -220,7 +221,7 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(1, entityTable.getRowCount());
         assertEquals(1, personTable.getRowCount());
         assertEquals(1, driversLicenseTable.getRowCount());
-        assertNotEquals(0, personTable.getInt("drivers_license_id"));
+        assertEquals(Cayenne.pkForObject(dl), personTable.getInt("drivers_license_id"));
     }
     
     @Test
@@ -239,7 +240,7 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(1, entityTable.getRowCount());
         assertEquals(1, personTable.getRowCount());
         assertEquals(1, agronomistTable.getRowCount());
-        assertNotEquals(0, agronomistTable.getInt("person_id"));
+        assertEquals(Cayenne.pkForObject(person), agronomistTable.getInt("person_id"));
     }
     
     @Test
@@ -258,7 +259,7 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(1, entityTable.getRowCount());
         assertEquals(1, personTable.getRowCount());
         assertEquals(1, familyTable.getRowCount());
-        assertNotEquals(0, personTable.getInt("family_id"));
+        assertEquals(Cayenne.pkForObject(family), personTable.getInt("family_id"));
     }
     
     @Test
@@ -277,7 +278,7 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(1, entityTable.getRowCount());
         assertEquals(1, personTable.getRowCount());
         assertEquals(1, birthCertificateTable.getRowCount());
-        assertNotEquals(0, personTable.getInt("birth_certificate_id"));
+        assertEquals(Cayenne.pkForObject(bc), personTable.getInt("birth_certificate_id"));
     }
     
     @Test
@@ -296,7 +297,7 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(1, entityTable.getRowCount());
         assertEquals(1, personTable.getRowCount());
         assertEquals(1, receiptTable.getRowCount());
-        assertNotEquals(0, receiptTable.getInt("person_id"));
+        assertEquals(Cayenne.pkForObject(person), receiptTable.getInt("person_id"));
     }
 
 
@@ -327,7 +328,7 @@ public class VerticalInheritanceSB extends ServerCase {
         context.commitChanges();
 
         assertEquals(so.getPerson(), person);
-        assertEquals(1, salesOrderTable.getInt("person_id"));
+        assertEquals(DEFAULT_PERSON_ID, salesOrderTable.getInt("person_id"));
     }
 
     @Test
@@ -372,7 +373,6 @@ public class VerticalInheritanceSB extends ServerCase {
 
         IvPerson person = context.newObject(IvPerson.class);
 
-        //FIX SO has no (document) type on creation. See BaseContext.injectInitialValue
         IvSalesOrder so = context.newObject(IvSalesOrder.class);
 
 
@@ -385,7 +385,7 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(1, documentTable.getRowCount());
         assertEquals(1, orderTable.getRowCount());
         assertEquals(1, salesOrderTable.getRowCount());
-        assertNotEquals(0, salesOrderTable.getInt("person_id"));
+        assertEquals(Cayenne.pkForObject(person), salesOrderTable.getInt("person_id"));
     }
 
     @Test
@@ -397,7 +397,6 @@ public class VerticalInheritanceSB extends ServerCase {
 
         IvReceipt receipt = context.newObject(IvReceipt.class);
 
-        //FIX SO has no (document) type on creation. See BaseContext.injectInitialValue
         IvSalesOrder so = context.newObject(IvSalesOrder.class);
 
 
@@ -409,7 +408,7 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(1, receiptTable.getRowCount());
         assertEquals(1, orderTable.getRowCount());
         assertEquals(1, salesOrderTable.getRowCount());
-        assertNotEquals(0, receiptTable.getInt("sales_order_id"));
+        assertEquals(Cayenne.pkForObject(so), receiptTable.getInt("sales_order_id"));
     }
 
 
@@ -443,28 +442,136 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(so.getAgronomist(), agronomist);
         assertEquals(8, orderTable.getInt("agronomist_id"));
     }
-	
-	@Test
-	public void testAbstractHasInheritance() throws Exception { //TODO May be redundant with test from another inheritance suite.
-		setupDefaultPerson();
 
+    @Test
+    public void testAgronomistOneToManyInsertOrder() throws Exception {
+        TableHelper agronomistTable = new TableHelper(dbHelper, "iv_agronomist");
+        TableHelper documentTable = new TableHelper(dbHelper, "iv_document");
+        TableHelper orderTable = new TableHelper(dbHelper, "iv_order");
+        TableHelper salesOrderTable = new TableHelper(dbHelper, "iv_sales_order");
 
+        IvAgronomist agronomist = context.newObject(IvAgronomist.class);
+        IvSalesOrder so = context.newObject(IvSalesOrder.class);
 
-		TableHelper emailTable = new TableHelper(dbHelper, "iv_email");
-		emailTable.setColumns("id", "address");
+        agronomist.addToOrders(so);
 
-		emailTable.insert(5, "a@b.com");
+        context.commitChanges();
 
-		IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
-		IvEmail email = context.selectOne(new SelectQuery<>(IvEmail.class));
+        assertEquals(so.getAgronomist(), agronomist);
+        assertEquals(1, agronomistTable.getRowCount());
+        assertEquals(1, documentTable.getRowCount());
+        assertEquals(1, orderTable.getRowCount());
+        assertEquals(1, salesOrderTable.getRowCount());
+        assertEquals(Cayenne.pkForObject(agronomist), orderTable.getInt("agronomist_id"));
+    }
 
-		email.setEntity(person);
+    @Test
+    public void testOrderChangeAgronomist() throws Exception {
+        TableHelper orderTable = new TableHelper(dbHelper, "iv_order");
 
-		context.commitChanges();
+        IvAgronomist agronomist1 = context.newObject(IvAgronomist.class);
+        IvAgronomist agronomist2 = context.newObject(IvAgronomist.class);
+        IvSalesOrder so = context.newObject(IvSalesOrder.class);
 
-		assertEquals(email.getEntity(), person);
-		assertEquals(1, emailTable.getInt("entity_id"));
-	}
+        so.setAgronomist(agronomist1);
+
+        context.commitChanges();
+
+        so.setAgronomist(agronomist2);
+
+        context.commitChanges();
+
+        assertEquals(so.getAgronomist(), agronomist2);
+//        assertEquals(Cayenne.pkForObject(agronomist2), orderTable.getInt("agronomist_id"));
+        assertEquals(Cayenne.pkForObject(agronomist2), orderTable.getInt("agronomist_id"));
+    }
+    
+    @Test
+    public void testPersonManyToManyInsertWorkplace() throws Exception {
+        setupDefaultPerson();
+
+        TableHelper workplaceTable = new TableHelper(dbHelper, "iv_workplace");
+        workplaceTable.setColumns("id");
+
+        TableHelper personWorkplaceTable = new TableHelper(dbHelper, "iv_person_workplace");
+
+        workplaceTable.insert(5);
+
+        IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+        IvWorkplace workplace = context.selectOne(new SelectQuery<>(IvWorkplace.class));
+
+        person.addToWorkplaces(workplace);
+
+        context.commitChanges();
+
+        assertEquals(1, person.getWorkplaces().size());
+        assertEquals(1, workplace.getPeople().size());
+        assertEquals(1, personWorkplaceTable.getRowCount());
+    }
+
+    @Test
+    public void testPersonManyToManyDeleteWorkplace() throws Exception {
+        setupDefaultPerson();
+
+        TableHelper personTable = new TableHelper(dbHelper, "iv_person");
+
+        TableHelper workplaceTable = new TableHelper(dbHelper, "iv_workplace");
+        workplaceTable.setColumns("id");
+
+        TableHelper personWorkplaceTable = new TableHelper(dbHelper, "iv_person_workplace");
+        personWorkplaceTable.setColumns("id", "person_id", "workplace_id");
+
+        workplaceTable.insert(5);
+        personWorkplaceTable.insert(1, DEFAULT_PERSON_ID, 5);
+
+        IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+        IvWorkplace workplace = context.selectOne(new SelectQuery<>(IvWorkplace.class));
+
+        assertEquals(1, person.getWorkplaces().size());
+        assertEquals(1, workplace.getPeople().size());
+        assertEquals(1, personWorkplaceTable.getRowCount());
+
+        person.removeFromWorkplaces(workplace);
+
+        context.commitChanges();
+
+        assertEquals(0, person.getWorkplaces().size());
+        assertEquals(0, workplace.getPeople().size());
+        assertEquals(0, personWorkplaceTable.getRowCount());
+        assertEquals(1, personTable.getRowCount());
+        assertEquals(1, workplaceTable.getRowCount());
+    }
+
+    @Test
+    public void testMultiLevelInheritanceSetOwnProperty() throws Exception {
+        TableHelper purchaseOrderTable = new TableHelper(dbHelper, "iv_purchase_order");
+
+        IvPurchaseOrder po = context.newObject(IvPurchaseOrder.class);
+
+        context.commitChanges();
+
+        po.setTotal(25);
+
+        context.commitChanges();
+
+        assertEquals(25, po.getTotal());
+        assertEquals(25, purchaseOrderTable.getInt("total"));
+    }
+
+    public void testMultiLevelInheritanceSetInheritedProperty() throws Exception {
+        TableHelper orderTable = new TableHelper(dbHelper, "iv_order");
+
+        IvPurchaseOrder po = context.newObject(IvPurchaseOrder.class);
+
+        context.commitChanges();
+
+        po.setReference("abcd");
+
+        context.commitChanges();
+
+        assertEquals("abcd", po.getReference());
+        assertEquals("abcd", orderTable.getString("reference"));
+    }
 
 	private void setupDefaultPerson() throws SQLException {
 		TableHelper entityTable = new TableHelper(dbHelper, "iv_entity");
@@ -476,9 +583,5 @@ public class VerticalInheritanceSB extends ServerCase {
 		entityTable.insert(DEFAULT_PERSON_ID, DEFAULT_PERSON_REFERENCE, "P");
 		personTable.insert(DEFAULT_PERSON_ID, DEFAULT_PERSON_NAME);
 	}
-
-	//TODO Test creating obj that starts with inheritance relationship
-	//Test nullifying relationship
-	//Test multiple level inheritance - before this, need to settle any 3+ dbRel flattened rel issues
 
 }

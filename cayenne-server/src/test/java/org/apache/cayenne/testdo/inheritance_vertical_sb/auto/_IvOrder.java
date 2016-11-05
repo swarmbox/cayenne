@@ -17,6 +17,7 @@ public abstract class _IvOrder extends IvDocument {
     public static final String ID_PK_COLUMN = "id";
 
     public static final Property<String> ORDER_TYPE = new Property<String>("orderType");
+    public static final Property<String> REFERENCE = new Property<String>("reference");
     public static final Property<IvAgronomist> AGRONOMIST = new Property<IvAgronomist>("agronomist");
 
     public void setOrderType(String orderType) {
@@ -24,6 +25,13 @@ public abstract class _IvOrder extends IvDocument {
     }
     public String getOrderType() {
         return (String)readProperty("orderType");
+    }
+
+    public void setReference(String reference) {
+        writeProperty("reference", reference);
+    }
+    public String getReference() {
+        return (String)readProperty("reference");
     }
 
     public void setAgronomist(IvAgronomist agronomist) {

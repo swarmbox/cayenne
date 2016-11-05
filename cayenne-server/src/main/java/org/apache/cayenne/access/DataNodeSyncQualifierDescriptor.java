@@ -88,16 +88,7 @@ class DataNodeSyncQualifierDescriptor {
 				});
 			}
 		} else {
-
-			// TODO: andrus 12/23/2007 - only one step relationship is
-			// supported...
-			if (descriptor.getPathFromMaster().size() != 1) {
-				throw new CayenneRuntimeException(
-						"Only single step dependent relationships are currently supported. Actual path length: "
-								+ descriptor.getPathFromMaster().size());
-			}
-
-			DbRelationship masterDependentDbRel = descriptor.getPathFromMaster().get(0);
+			DbRelationship masterDependentDbRel = descriptor.getPathFromMaster().get(descriptor.getPathFromMaster().size()-1);
 
 			if (masterDependentDbRel != null) {
 				for (final DbJoin dbAttrPair : masterDependentDbRel.getJoins()) {

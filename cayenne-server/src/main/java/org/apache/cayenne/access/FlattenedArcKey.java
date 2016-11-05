@@ -60,11 +60,9 @@ final class FlattenedArcKey {
 
 		this.relationship = relationship;
 
-		List<DbRelationship> dbRelationships = relationship.getDbRelationships();
-		if (dbRelationships.size() != 2) {
-			throw new CayenneRuntimeException(
-					"Only single-step flattened relationships are supported in this operation, whereas the relationship '%s' has %s",
-					relationship, dbRelationships.size());
+		List<DbRelationship> dbRelationships = relationship.getManyToManyRelationships();
+		if (dbRelationships == null) {
+			throw new CayenneRuntimeException("Only many-to-many relationships are supported in this operation");
 		}
 
 		DbRelationship r1 = dbRelationships.get(0);
@@ -301,14 +299,8 @@ final class FlattenedArcKey {
 
 	private Map eagerJoinSnapshot() {
 
-		List<DbRelationship> relList = relationship.getDbRelationships();
-		if (relList.size() != 2) {
-			throw new CayenneRuntimeException(
-					"Only single-step flattened relationships are supported in this operation: " + relationship);
-		}
-
-		DbRelationship firstDbRel = relList.get(0);
-		DbRelationship secondDbRel = relList.get(1);
+		DbRelationship firstDbRel = id1.getIncominArc();
+		DbRelationship secondDbRel = id2.getIncominArc().getReverseRelationship();
 
 		// here ordering of ids is determined by 'relationship', so use id1, id2
 		// instead of orderedIds
@@ -329,14 +321,8 @@ final class FlattenedArcKey {
 
 	private Map<String, Object> lazyJoinSnapshot() {
 
-		List<DbRelationship> relList = relationship.getDbRelationships();
-		if (relList.size() != 2) {
-			throw new CayenneRuntimeException(
-					"Only single-step flattened relationships are supported in this operation: " + relationship);
-		}
-
-		DbRelationship firstDbRel = relList.get(0);
-		DbRelationship secondDbRel = relList.get(1);
+		DbRelationship firstDbRel = id1.getIncominArc();
+		DbRelationship secondDbRel = id2.getIncominArc().getReverseRelationship();
 
 		List<DbJoin> fromSourceJoins = firstDbRel.getJoins();
 		List<DbJoin> toTargetJoins = secondDbRel.getJoins();

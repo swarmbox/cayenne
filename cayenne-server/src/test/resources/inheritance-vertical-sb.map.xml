@@ -21,11 +21,6 @@
 		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
 		<db-attribute name="reference" type="VARCHAR" length="100"/>
 	</db-entity>
-	<db-entity name="iv_email">
-		<db-attribute name="address" type="VARCHAR" length="100"/>
-		<db-attribute name="entity_id" type="INTEGER"/>
-		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
-	</db-entity>
 	<db-entity name="iv_entity">
 		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
 		<db-attribute name="reference" type="VARCHAR" length="100"/>
@@ -39,6 +34,7 @@
 		<db-attribute name="agronomist_id" type="INTEGER"/>
 		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
 		<db-attribute name="order_type" type="CHAR" isMandatory="true" length="1"/>
+		<db-attribute name="reference" type="VARCHAR" length="100"/>
 	</db-entity>
 	<db-entity name="iv_person">
 		<db-attribute name="birth_certificate_id" type="INTEGER"/>
@@ -46,6 +42,15 @@
 		<db-attribute name="family_id" type="INTEGER"/>
 		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
 		<db-attribute name="name" type="VARCHAR" length="100"/>
+	</db-entity>
+	<db-entity name="iv_person_workplace">
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isGenerated="true" isMandatory="true"/>
+		<db-attribute name="person_id" type="INTEGER" isMandatory="true"/>
+		<db-attribute name="workplace_id" type="INTEGER" isMandatory="true"/>
+	</db-entity>
+	<db-entity name="iv_purchase_order">
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
+		<db-attribute name="total" type="INTEGER"/>
 	</db-entity>
 	<db-entity name="iv_receipt">
 		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
@@ -57,6 +62,9 @@
 		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
 		<db-attribute name="person_id" type="INTEGER"/>
 		<db-attribute name="total" type="INTEGER"/>
+	</db-entity>
+	<db-entity name="iv_workplace">
+		<db-attribute name="id" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
 	</db-entity>
 	<obj-entity name="IvAgronomist" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvAgronomist" dbEntityName="iv_agronomist">
 		<obj-attribute name="plantsPlanted" type="int" db-attribute-path="plants_planted"/>
@@ -71,9 +79,6 @@
 	<obj-entity name="IvDriversLicense" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvDriversLicense" dbEntityName="iv_drivers_license">
 		<obj-attribute name="reference" type="java.lang.String" db-attribute-path="reference"/>
 	</obj-entity>
-	<obj-entity name="IvEmail" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvEmail" dbEntityName="iv_email">
-		<obj-attribute name="address" type="java.lang.String" db-attribute-path="address"/>
-	</obj-entity>
 	<obj-entity name="IvEntity" abstract="true" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvEntity" dbEntityName="iv_entity">
 		<obj-attribute name="reference" type="java.lang.String" db-attribute-path="reference"/>
 		<obj-attribute name="type" type="java.lang.String" db-attribute-path="type"/>
@@ -84,20 +89,26 @@
 	<obj-entity name="IvOrder" superEntityName="IvDocument" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvOrder">
 		<qualifier><![CDATA[type = "O"]]></qualifier>
 		<obj-attribute name="orderType" type="java.lang.String" db-attribute-path="order.order_type"/>
+		<obj-attribute name="reference" type="java.lang.String" db-attribute-path="order.reference"/>
 		<attribute-override name="type" db-attribute-path="type"/>
 	</obj-entity>
 	<obj-entity name="IvPerson" superEntityName="IvEntity" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvPerson">
 		<qualifier><![CDATA[type = "P"]]></qualifier>
 		<obj-attribute name="name" type="java.lang.String" db-attribute-path="person.name"/>
 	</obj-entity>
+	<obj-entity name="IvPurchaseOrder" superEntityName="IvOrder" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvPurchaseOrder">
+		<qualifier><![CDATA[(type = "O") and (orderType = "P")]]></qualifier>
+		<obj-attribute name="total" type="int" db-attribute-path="order.purchaseOrder.total"/>
+	</obj-entity>
 	<obj-entity name="IvReceipt" superEntityName="IvDocument" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvReceipt">
 		<qualifier><![CDATA[type = "R"]]></qualifier>
 		<obj-attribute name="total" type="int" db-attribute-path="receipt.total"/>
 	</obj-entity>
 	<obj-entity name="IvSalesOrder" superEntityName="IvOrder" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvSalesOrder">
-		<qualifier><![CDATA[orderType = "S"]]></qualifier>
-		<obj-attribute name="total" type="int" db-attribute-path="order.salesOrder.total"/>
+		<qualifier><![CDATA[(type = "O") and (orderType = "S")]]></qualifier>
 		<attribute-override name="orderType" db-attribute-path="order.order_type"/>
+	</obj-entity>
+	<obj-entity name="IvWorkplace" className="org.apache.cayenne.testdo.inheritance_vertical_sb.IvWorkplace" dbEntityName="iv_workplace">
 	</obj-entity>
 	<db-relationship name="orders" source="iv_agronomist" target="iv_order" toMany="true">
 		<db-attribute-pair source="id" target="agronomist_id"/>
@@ -123,12 +134,6 @@
 	<db-relationship name="person" source="iv_drivers_license" target="iv_person" toMany="false">
 		<db-attribute-pair source="id" target="drivers_license_id"/>
 	</db-relationship>
-	<db-relationship name="entity" source="iv_email" target="iv_entity" toMany="false">
-		<db-attribute-pair source="entity_id" target="id"/>
-	</db-relationship>
-	<db-relationship name="emails" source="iv_entity" target="iv_email" toMany="true">
-		<db-attribute-pair source="id" target="entity_id"/>
-	</db-relationship>
 	<db-relationship name="person" source="iv_entity" target="iv_person" toDependentPK="true" toMany="false">
 		<db-attribute-pair source="id" target="id"/>
 	</db-relationship>
@@ -139,6 +144,9 @@
 		<db-attribute-pair source="agronomist_id" target="id"/>
 	</db-relationship>
 	<db-relationship name="document" source="iv_order" target="iv_document" toMany="false">
+		<db-attribute-pair source="id" target="id"/>
+	</db-relationship>
+	<db-relationship name="purchaseOrder" source="iv_order" target="iv_purchase_order" toDependentPK="true" toMany="false">
 		<db-attribute-pair source="id" target="id"/>
 	</db-relationship>
 	<db-relationship name="salesOrder" source="iv_order" target="iv_sales_order" toDependentPK="true" toMany="false">
@@ -159,11 +167,23 @@
 	<db-relationship name="family" source="iv_person" target="iv_family" toMany="false">
 		<db-attribute-pair source="family_id" target="id"/>
 	</db-relationship>
+	<db-relationship name="personWorkplaces" source="iv_person" target="iv_person_workplace" toMany="true">
+		<db-attribute-pair source="id" target="person_id"/>
+	</db-relationship>
 	<db-relationship name="receipts" source="iv_person" target="iv_receipt" toMany="true">
 		<db-attribute-pair source="id" target="person_id"/>
 	</db-relationship>
 	<db-relationship name="salesOrders" source="iv_person" target="iv_sales_order" toMany="true">
 		<db-attribute-pair source="id" target="person_id"/>
+	</db-relationship>
+	<db-relationship name="person" source="iv_person_workplace" target="iv_person" toMany="false">
+		<db-attribute-pair source="person_id" target="id"/>
+	</db-relationship>
+	<db-relationship name="workplace" source="iv_person_workplace" target="iv_workplace" toMany="false">
+		<db-attribute-pair source="workplace_id" target="id"/>
+	</db-relationship>
+	<db-relationship name="order" source="iv_purchase_order" target="iv_order" toMany="false">
+		<db-attribute-pair source="id" target="id"/>
 	</db-relationship>
 	<db-relationship name="document" source="iv_receipt" target="iv_document" toMany="false">
 		<db-attribute-pair source="id" target="id"/>
@@ -183,12 +203,13 @@
 	<db-relationship name="receipt" source="iv_sales_order" target="iv_receipt" toMany="false">
 		<db-attribute-pair source="id" target="sales_order_id"/>
 	</db-relationship>
+	<db-relationship name="personWorkplaces" source="iv_workplace" target="iv_person_workplace" toMany="true">
+		<db-attribute-pair source="id" target="workplace_id"/>
+	</db-relationship>
 	<obj-relationship name="orders" source="IvAgronomist" target="IvOrder" deleteRule="Deny" db-relationship-path="orders.document"/>
 	<obj-relationship name="person" source="IvAgronomist" target="IvPerson" deleteRule="Nullify" db-relationship-path="person.entity"/>
 	<obj-relationship name="person" source="IvBirthCertificate" target="IvPerson" deleteRule="Nullify" db-relationship-path="birthCertificate.person.entity"/>
 	<obj-relationship name="person" source="IvDriversLicense" target="IvPerson" deleteRule="Nullify" db-relationship-path="person.entity"/>
-	<obj-relationship name="entity" source="IvEmail" target="IvEntity" deleteRule="Nullify" db-relationship-path="entity"/>
-	<obj-relationship name="emails" source="IvEntity" target="IvEmail" deleteRule="Deny" db-relationship-path="emails"/>
 	<obj-relationship name="people" source="IvFamily" target="IvPerson" deleteRule="Deny" db-relationship-path="people.entity"/>
 	<obj-relationship name="agronomist" source="IvOrder" target="IvAgronomist" deleteRule="Nullify" db-relationship-path="order.agronomist"/>
 	<obj-relationship name="agronomist" source="IvPerson" target="IvAgronomist" deleteRule="Deny" db-relationship-path="person.agronomist"/>
@@ -197,8 +218,10 @@
 	<obj-relationship name="family" source="IvPerson" target="IvFamily" deleteRule="Nullify" db-relationship-path="person.family"/>
 	<obj-relationship name="receipts" source="IvPerson" target="IvReceipt" deleteRule="Deny" db-relationship-path="person.receipts.document"/>
 	<obj-relationship name="salesOrders" source="IvPerson" target="IvSalesOrder" deleteRule="Deny" db-relationship-path="person.salesOrders.order.document"/>
+	<obj-relationship name="workplaces" source="IvPerson" target="IvWorkplace" deleteRule="Deny" db-relationship-path="person.personWorkplaces.workplace"/>
 	<obj-relationship name="person" source="IvReceipt" target="IvPerson" deleteRule="Nullify" db-relationship-path="receipt.person.entity"/>
 	<obj-relationship name="salesOrder" source="IvReceipt" target="IvSalesOrder" deleteRule="Nullify" db-relationship-path="receipt.salesOrder.order.document"/>
 	<obj-relationship name="person" source="IvSalesOrder" target="IvPerson" deleteRule="Nullify" db-relationship-path="order.salesOrder.person.entity"/>
 	<obj-relationship name="receipt" source="IvSalesOrder" target="IvReceipt" deleteRule="Nullify" db-relationship-path="order.salesOrder.receipt.document"/>
+	<obj-relationship name="people" source="IvWorkplace" target="IvPerson" deleteRule="Deny" db-relationship-path="personWorkplaces.person.entity"/>
 </data-map>

@@ -36,6 +36,7 @@ import org.apache.cayenne.graph.NodeIdChangeOperation;
 import org.apache.cayenne.map.DbEntity;
 import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
+import org.apache.cayenne.map.ObjRelationship;
 import org.apache.cayenne.query.Query;
 import org.apache.cayenne.reflect.ArcProperty;
 import org.apache.cayenne.reflect.AttributeProperty;
@@ -111,19 +112,8 @@ abstract class DataDomainSyncBucket {
             {
                 DbEntityClassDescriptor dbEntityDescriptor = new DbEntityClassDescriptor(
                         descriptor);
-                DbEntity dbEntity = dbEntityDescriptor.getDbEntity();
 
-                Collection<DbEntityClassDescriptor> descriptors = descriptorsByDbEntity
-                        .get(dbEntity);
-                if (descriptors == null) {
-                    descriptors = new ArrayList<DbEntityClassDescriptor>(1);
-                    dbEntities.add(dbEntity);
-                    descriptorsByDbEntity.put(dbEntity, descriptors);
-                }
-
-                if (!containsClassDescriptor(descriptors, descriptor)) {
-                    descriptors.add(dbEntityDescriptor);
-                }
+                addDbEntityClassDescriptor(dbEntityDescriptor, descriptor);
             }
 
             // secondary DbEntities...
@@ -137,21 +127,36 @@ abstract class DataDomainSyncBucket {
                             descriptor,
                             objAttribute);
 
-                    DbEntity dbEntity = dbEntityDescriptor.getDbEntity();
-                    Collection<DbEntityClassDescriptor> descriptors = descriptorsByDbEntity
-                            .get(dbEntity);
-
-                    if (descriptors == null) {
-                        descriptors = new ArrayList<DbEntityClassDescriptor>(1);
-                        dbEntities.add(dbEntity);
-                        descriptorsByDbEntity.put(dbEntity, descriptors);
-                    }
-
-                    if (!containsClassDescriptor(descriptors, descriptor)) {
-                        descriptors.add(dbEntityDescriptor);
-                    }
+                    addDbEntityClassDescriptor(dbEntityDescriptor, descriptor);
                 }
             }
+
+            for (ObjRelationship objRelationship : descriptor.getEntity().getRelationships()) {
+
+                if (objRelationship.isFlattened()) {
+                    DbEntityClassDescriptor dbEntityDescriptor = new DbEntityClassDescriptor(
+                            descriptor,
+                            objRelationship);
+
+                    addDbEntityClassDescriptor(dbEntityDescriptor, descriptor);
+                }
+            }
+        }
+    }
+
+    private void addDbEntityClassDescriptor(DbEntityClassDescriptor dbEntityDescriptor, ClassDescriptor classDescriptor) {
+        DbEntity dbEntity = dbEntityDescriptor.getDbEntity();
+        Collection<DbEntityClassDescriptor> descriptors = descriptorsByDbEntity
+                .get(dbEntity);
+
+        if (descriptors == null) {
+            descriptors = new ArrayList<DbEntityClassDescriptor>(1);
+            dbEntities.add(dbEntity);
+            descriptorsByDbEntity.put(dbEntity, descriptors);
+        }
+
+        if (!containsClassDescriptor(descriptors, classDescriptor)) {
+            descriptors.add(dbEntityDescriptor);
         }
     }
 

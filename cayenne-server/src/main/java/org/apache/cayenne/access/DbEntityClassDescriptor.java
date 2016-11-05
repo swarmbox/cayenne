@@ -27,6 +27,7 @@ import org.apache.cayenne.map.DbEntity;
 import org.apache.cayenne.map.DbRelationship;
 import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
+import org.apache.cayenne.map.ObjRelationship;
 import org.apache.cayenne.reflect.ClassDescriptor;
 
 /**
@@ -66,6 +67,25 @@ class DbEntityClassDescriptor {
                 else if (object instanceof DbAttribute) {
                     this.dbEntity = ((DbAttribute) object).getEntity();
                 }
+            }
+        }
+
+        if (dbEntity == null) {
+            dbEntity = classDescriptor.getEntity().getDbEntity();
+        }
+    }
+
+    DbEntityClassDescriptor(ClassDescriptor classDescriptor, ObjRelationship masterRelationship) {
+        this.classDescriptor = classDescriptor;
+
+        DbRelationship targetRelationship = masterRelationship.getTargetDbRelationship();
+
+        if (targetRelationship != null) {
+            int targetIdx = masterRelationship.getDbRelationships().indexOf(targetRelationship);
+
+            if (targetIdx > 0) {
+                dbEntity = targetRelationship.getSourceEntity();
+                pathFromMaster = masterRelationship.getDbRelationships().subList(0, targetIdx);
             }
         }
 
