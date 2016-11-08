@@ -573,6 +573,61 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals("abcd", orderTable.getString("reference"));
     }
 
+    @Test
+    public void testPersonOneToOneRemoveDriversLicense() throws Exception {
+        TableHelper entityTable = new TableHelper(dbHelper, "iv_entity");
+        TableHelper personTable = new TableHelper(dbHelper, "iv_person");
+        TableHelper driversLicenseTable = new TableHelper(dbHelper, "iv_drivers_license");
+
+        IvPerson person = context.newObject(IvPerson.class);
+        IvDriversLicense dl = context.newObject(IvDriversLicense.class);
+
+        person.setDriversLicense(dl);
+
+        context.commitChanges();
+
+        assertEquals(Cayenne.pkForObject(dl), personTable.getInt("drivers_license_id"));
+        assertEquals(person.getDriversLicense(), dl);
+        assertEquals(dl.getPerson(), person);
+
+        person.setDriversLicense(null);
+
+        context.commitChanges();
+
+        assertEquals(1, entityTable.getRowCount());
+        assertEquals(1, personTable.getRowCount());
+        assertEquals(1, driversLicenseTable.getRowCount());
+        assertEquals(0, personTable.getInt("drivers_license_id"));
+    }
+    
+    @Test
+    public void testPersonOneToManyRemoveFamily() throws Exception {
+        TableHelper entityTable = new TableHelper(dbHelper, "iv_entity");
+        TableHelper personTable = new TableHelper(dbHelper, "iv_person");
+        TableHelper familyTable = new TableHelper(dbHelper, "iv_family");
+
+        IvPerson person = context.newObject(IvPerson.class);
+        IvFamily family = context.newObject(IvFamily.class);
+
+        person.setFamily(family);
+
+        context.commitChanges();
+
+        assertEquals(Cayenne.pkForObject(family), personTable.getInt("family_id"));
+        assertEquals(person.getFamily(), family);
+        assertTrue(family.getPeople().contains(person));
+
+        family.removeFromPeople(person);
+
+        context.commitChanges();
+
+        assertEquals(1, entityTable.getRowCount());
+        assertEquals(1, personTable.getRowCount());
+        assertEquals(1, familyTable.getRowCount());
+        assertEquals(0, personTable.getInt("family_id"));
+    }
+
+
 	private void setupDefaultPerson() throws SQLException {
 		TableHelper entityTable = new TableHelper(dbHelper, "iv_entity");
 		entityTable.setColumns("id", "reference", "type");

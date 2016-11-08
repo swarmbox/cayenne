@@ -209,8 +209,11 @@ class DataDomainDBDiffBuilder implements GraphChangeHandler {
                 throw new IllegalArgumentException("Bad arcId: " + arcId);
             }
 
-        } else if (!relationship.isSourceIndependentFromTargetChange()) {
-            doArcDeleted(targetNodeId, arcId);
+        } else {
+            DbRelationship targetRelationship = relationship.getTargetDbRelationship();
+            if (targetRelationship != null && targetRelationship.getSourceEntity().equals(dbEntity)) {
+                doArcDeleted(targetNodeId, arcId);
+            }
         }
     }
 
