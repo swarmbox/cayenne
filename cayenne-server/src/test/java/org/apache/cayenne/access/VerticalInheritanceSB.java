@@ -583,6 +583,7 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(25, purchaseOrderTable.getInt("total"));
     }
 
+    @Test
     public void testMultiLevelInheritanceSetInheritedProperty() throws Exception {
         TableHelper orderTable = new TableHelper(dbHelper, "iv_order");
 
@@ -699,6 +700,26 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(driversLicenseId, dataRow.get("person.drivers_license_id"));
     }
 
+    //TODO Finish writing this test if altering DataRowUtils.forceMergeWithSnapshot
+//    @Test
+//    public void testInheritanceSnapshotForceMerge() {
+//        ClassDescriptor descriptor = context.getEntityResolver().getClassDescriptor("IvPerson");
+//
+//        IvDriversLicense dl = context.newObject(IvDriversLicense.class);
+//        IvPerson person = context.newObject(IvPerson.class);
+//
+//        person.setDriversLicense(dl);
+//
+//        context.commitChanges();
+//
+//        Map<String, Object> map = new HashMap<>();
+//
+//        map.put("drivers_license_id", null);
+//
+//        DataRow dataRow = new DataRow(map);
+//
+//        DataRowUtils.forceMergeWithSnapshot((DataContext) context, descriptor, person, dataRow);
+//    }
 
 	private void setupDefaultPerson() throws SQLException {
 		TableHelper entityTable = new TableHelper(dbHelper, "iv_entity");
