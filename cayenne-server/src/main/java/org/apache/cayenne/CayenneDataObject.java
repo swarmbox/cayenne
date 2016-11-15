@@ -655,19 +655,15 @@ public class CayenneDataObject extends PersistentObject implements DataObject, V
 		// validate mandatory relationships
 		for (final ObjRelationship relationship : objEntity.getRelationships()) {
 
-			if (relationship.isSourceIndependentFromTargetChange()) {
-				continue;
-			}
+			DbRelationship dbRelationship = relationship.getTargetDbRelationship();
 
-			List<DbRelationship> dbRels = relationship.getDbRelationships();
-			if (dbRels.isEmpty()) {
+			if (dbRelationship == null) {
 				continue;
 			}
 
 			// if db relationship is not based on a PK and is based on mandatory
 			// attributes, see if we have a target object set
 			boolean validate = true;
-			DbRelationship dbRelationship = dbRels.get(0);
 			for (DbJoin join : dbRelationship.getJoins()) {
 				DbAttribute source = join.getSource();
 

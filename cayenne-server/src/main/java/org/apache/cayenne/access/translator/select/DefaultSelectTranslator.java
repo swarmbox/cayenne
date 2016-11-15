@@ -35,17 +35,7 @@ import org.apache.cayenne.dba.QuotingStrategy;
 import org.apache.cayenne.exp.Expression;
 import org.apache.cayenne.exp.ExpressionFactory;
 import org.apache.cayenne.exp.parser.ASTDbPath;
-import org.apache.cayenne.map.DataMap;
-import org.apache.cayenne.map.DbAttribute;
-import org.apache.cayenne.map.DbEntity;
-import org.apache.cayenne.map.DbJoin;
-import org.apache.cayenne.map.DbRelationship;
-import org.apache.cayenne.map.EntityResolver;
-import org.apache.cayenne.map.JoinType;
-import org.apache.cayenne.map.ObjAttribute;
-import org.apache.cayenne.map.ObjEntity;
-import org.apache.cayenne.map.ObjRelationship;
-import org.apache.cayenne.map.PathComponent;
+import org.apache.cayenne.map.*;
 import org.apache.cayenne.query.PrefetchSelectQuery;
 import org.apache.cayenne.query.PrefetchTreeNode;
 import org.apache.cayenne.query.Query;
@@ -369,12 +359,36 @@ public class DefaultSelectTranslator extends QueryAssembler implements SelectTra
 				resetJoinStack();
 
 				ObjRelationship rel = property.getRelationship();
-				DbRelationship dbRel = rel.getDbRelationships().get(0);
+				DbRelationship dbRel = null;
+				String labelPrefix = null;
 
-				List<DbJoin> joins = dbRel.getJoins();
-				for (DbJoin join : joins) {
-					DbAttribute src = join.getSource();
-					appendColumn(columns, null, src, attributes, null);
+				if (!rel.isFlattened()) { //Optimize for non-flattened relationships
+					dbRel = rel.getDbRelationships().get(0);
+				} else {
+					List<DbRelationship> dbRels = rel.getTargetDbRelationshipPath();
+
+					if (dbRels != null && dbRels.size() > 0) {
+						Iterator<DbRelationship> dbRelIt = dbRels.iterator();
+						dbRel = dbRelIt.next();
+
+						while (dbRelIt.hasNext()) {
+							dbRelationshipAdded(dbRel, JoinType.LEFT_OUTER, null);
+							dbRel = dbRelIt.next();
+						}
+
+						//It would be more efficient to build path while iterating
+						labelPrefix = rel.getPathToTargetDbRelationship();
+						if (labelPrefix != null) { labelPrefix += Entity.PATH_SEPARATOR; }
+					}
+				}
+
+				if (dbRel != null) {
+					List<DbJoin> joins = dbRel.getJoins();
+					for (DbJoin join : joins) {
+						DbAttribute src = join.getSource();
+						String label = labelPrefix != null ? labelPrefix + src.getName() : null;
+						appendColumn(columns, null, src, attributes, label);
+					}
 				}
 			}
 		};

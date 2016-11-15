@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.apache.cayenne.CayenneDataObject;
 import org.apache.cayenne.exp.Property;
+import org.apache.cayenne.testdo.inheritance_vertical_sb.IvDeed;
 import org.apache.cayenne.testdo.inheritance_vertical_sb.IvPerson;
 
 /**
@@ -18,7 +19,17 @@ public abstract class _IvWorkplace extends CayenneDataObject {
 
     public static final String ID_PK_COLUMN = "id";
 
+    public static final Property<IvDeed> DEED = new Property<IvDeed>("deed");
     public static final Property<List<IvPerson>> PEOPLE = new Property<List<IvPerson>>("people");
+
+    public void setDeed(IvDeed deed) {
+        setToOneTarget("deed", deed, true);
+    }
+
+    public IvDeed getDeed() {
+        return (IvDeed)readProperty("deed");
+    }
+
 
     public void addToPeople(IvPerson obj) {
         addToManyTarget("people", obj, true);

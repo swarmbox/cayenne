@@ -19,6 +19,7 @@
 package org.apache.cayenne.access;
 
 import org.apache.cayenne.Cayenne;
+import org.apache.cayenne.DataRow;
 import org.apache.cayenne.ObjectContext;
 import org.apache.cayenne.di.Inject;
 import org.apache.cayenne.query.SelectQuery;
@@ -27,7 +28,10 @@ import org.apache.cayenne.test.jdbc.TableHelper;
 import org.apache.cayenne.testdo.inheritance_vertical_sb.*;
 import org.apache.cayenne.unit.di.server.ServerCase;
 import org.apache.cayenne.unit.di.server.UseServerRuntime;
+import org.apache.cayenne.validation.ValidationException;
 import org.junit.Test;
+import org.junit.Rule;
+import org.junit.rules.ExpectedException;
 
 import java.sql.SQLException;
 
@@ -47,6 +51,9 @@ public class VerticalInheritanceSB extends ServerCase {
 	private static final int DEFAULT_PERSON_ID = 1;
 	private static final String DEFAULT_PERSON_REFERENCE = "p1";
 	private static final String DEFAULT_PERSON_NAME = "John";
+
+    @Rule
+    public ExpectedException thrown = ExpectedException.none();
 
 	@Test
 	public void testPersonOneToManyUpdate() throws Exception {
@@ -485,6 +492,24 @@ public class VerticalInheritanceSB extends ServerCase {
 //        assertEquals(Cayenne.pkForObject(agronomist2), orderTable.getInt("agronomist_id"));
         assertEquals(Cayenne.pkForObject(agronomist2), orderTable.getInt("agronomist_id"));
     }
+
+    @Test
+    public void testPersonGetDriversLicense() throws Exception {
+        setupDefaultPerson();
+
+        TableHelper personTable = new TableHelper(dbHelper, "iv_person");
+        TableHelper driversLicenseTable = new TableHelper(dbHelper, "iv_drivers_license");
+
+        driversLicenseTable.setColumns("id");
+
+        driversLicenseTable.insert(45);
+        personTable.update().set("drivers_license_id", 45).execute();
+
+        IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+        IvDriversLicense dl = context.selectOne(new SelectQuery<>(IvDriversLicense.class));
+
+        assertEquals(dl, person.getDriversLicense());
+    }
     
     @Test
     public void testPersonManyToManyInsertWorkplace() throws Exception {
@@ -625,6 +650,53 @@ public class VerticalInheritanceSB extends ServerCase {
         assertEquals(1, personTable.getRowCount());
         assertEquals(1, familyTable.getRowCount());
         assertEquals(0, personTable.getInt("family_id"));
+    }
+
+    @Test
+    public void testInheritanceRelationshipValidation() {
+        context.newObject(IvDeed.class);
+
+        thrown.expect(ValidationException.class);
+        context.commitChanges();
+    }
+
+    @Test
+    public void testInheritanceSnapshotNoFault() {
+        IvPerson person = context.newObject(IvPerson.class);
+        IvDriversLicense dl = context.newObject(IvDriversLicense.class);
+
+        person.setName(DEFAULT_PERSON_NAME);
+        person.setDriversLicense(dl);
+
+        context.commitChanges();
+
+        DataRow dataRow = ((DataContext) context).currentSnapshot(person);
+
+        assertEquals(DEFAULT_PERSON_NAME, dataRow.get("person.name"));
+        assertEquals(Cayenne.pkForObject(dl), dataRow.get("person.drivers_license_id"));
+    }
+
+    @Test
+    public void testInheritanceSnapshotWithFault() throws Exception {
+        setupDefaultPerson();
+
+        final int driversLicenseId = 13;
+
+        TableHelper personTable = new TableHelper(dbHelper, "iv_person");
+
+        TableHelper driversLicenseTable = new TableHelper(dbHelper, "iv_drivers_license");
+        driversLicenseTable.setColumns("id");
+
+        driversLicenseTable.insert(driversLicenseId);
+
+        personTable.update().set("drivers_license_id", driversLicenseId).execute();
+
+        IvPerson person = context.selectOne(new SelectQuery<>(IvPerson.class));
+
+        DataRow dataRow = ((DataContext) context).currentSnapshot(person);
+
+        assertEquals(DEFAULT_PERSON_NAME, dataRow.get("person.name"));
+        assertEquals(driversLicenseId, dataRow.get("person.drivers_license_id"));
     }
 
 

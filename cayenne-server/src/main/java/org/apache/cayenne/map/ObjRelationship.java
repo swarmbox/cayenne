@@ -19,11 +19,7 @@
 
 package org.apache.cayenne.map;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.ListIterator;
+import java.util.*;
 
 import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.configuration.ConfigurationNode;
@@ -303,6 +299,151 @@ public class ObjRelationship extends Relationship implements ConfigurationNode {
         this.toMany = false;
     }
 
+    public DbRelationship getTargetDbRelationship() {
+        if (isToMany()) {
+            return null;
+        }
+
+        DbRelationship targetRelationship = null;
+
+        if (getSourceEntity().getSuperEntity() == null) {
+            targetRelationship = getDbRelationships().get(0);
+        } else {
+
+            for (DbRelationship dbRelationship : getDbRelationships()) {
+                if (!dbRelationship.isFromPK()) {
+                    targetRelationship = dbRelationship;
+                    break;
+                }
+            }
+        }
+
+        return targetRelationship !=null && !targetRelationship.isToDependentPK() && targetRelationship.isToPK() ? targetRelationship : null;
+    }
+
+    //TODO Consider caching this
+    //TODO Consistent naming between this method and getPathToTargetDbRelationship. Alter getTargetDbRelationship to use this?
+    public List<DbRelationship> getTargetDbRelationshipPath() {
+        List<DbRelationship> dbRels = new ArrayList<>();
+
+        if (isToMany()) {
+            return null;
+        }
+
+        DbRelationship targetRelationship = null;
+
+        if (getSourceEntity().getSuperEntity() == null) {
+            targetRelationship = getDbRelationships().get(0);
+            dbRels.add(targetRelationship);
+        } else {
+
+            for (DbRelationship dbRelationship : getDbRelationships()) {
+                dbRels.add(dbRelationship);
+                if (!dbRelationship.isFromPK()) {
+                    targetRelationship = dbRelationship;
+                    break;
+                }
+            }
+        }
+
+        return targetRelationship !=null && !targetRelationship.isToDependentPK() && targetRelationship.isToPK() ? dbRels : null;
+    }
+
+    public String getPathToTargetDbRelationship() {
+        int targetIndex = getDbRelationships().indexOf(getTargetDbRelationship());
+        if (targetIndex <= 0) {
+            return null;
+        }
+
+        return buildDbRelationshipPath(getDbRelationships().subList(0, targetIndex));
+    }
+
+    public List<DbRelationship> getManyToManyRelationships() {
+        if (!isFlattened()) {
+            return null;
+        }
+
+        DbRelationship rel1;
+        DbRelationship rel2;
+
+        //Find the first toMany; if immediately followed by fromMany, return those relationships
+        Iterator<DbRelationship> relationshipIt = getDbRelationships().iterator();
+
+        while (relationshipIt.hasNext()) {
+            rel1 = relationshipIt.next();
+
+            if (rel1.isToMany() && relationshipIt.hasNext()) {
+                rel2 = relationshipIt.next();
+
+                if (rel2.getReverseRelationship().isToMany()) {
+                    ArrayList<DbRelationship> relationships = new ArrayList<DbRelationship>(2);
+                    relationships.add(rel1);
+                    relationships.add(rel2);
+                    return relationships;
+                } else {
+                    return null;
+                }
+            }
+        }
+
+        return null;
+
+        //TODO Determine if code below would be preferable to current implementation
+//        DbRelationship rel1 = null;
+//        DbRelationship rel2 = null;
+//
+//        //Strictly require there to be exactly one toMany and one fromMany, which immediately follows the toMany
+//        for (DbRelationship relationship : getDbRelationships()) {
+//            if (rel1 == null) {
+//                if (relationship.getReverseRelationship().isToMany()) {
+//                    return null;
+//                }
+//                if (relationship.isToMany()) {
+//                    rel1 = relationship;
+//                }
+//            } else if (rel2 == null) {
+//                if (relationship.getReverseRelationship().isToMany()) {
+//                    rel2 = relationship;
+//                } else {
+//                    return null;
+//                }
+//            } else {
+//                if (relationship.isToMany() || relationship.getReverseRelationship().isToMany()) {
+//                    return null;
+//                }
+//            }
+//        }
+//
+//        if (rel1 == null || rel2 == null) {
+//            return null;
+//        }
+//
+//        ArrayList<DbRelationship> relationships = new ArrayList<DbRelationship>(2);
+//        relationships.add(rel1);
+//        relationships.add(rel2);
+//        return relationships;
+    }
+
+    public boolean isManyToMany() {
+      return getManyToManyRelationships() != null;
+    }
+
+    public Map<String, Object> targetPkSnapshotWithSrcSnapshot(Map<String, Object> srcSnapshot) {
+        DbRelationship targetDbRelationship = getTargetDbRelationship();
+        String sourcePrefix = null;
+
+        if (targetDbRelationship == null) {
+            return Collections.EMPTY_MAP;
+        }
+
+        int targetIndex = getDbRelationships().indexOf(targetDbRelationship);
+        if (targetIndex > 0) {
+            sourcePrefix = buildDbRelationshipPath(getDbRelationships().subList(0, targetIndex)) + Entity.PATH_SEPARATOR;
+        }
+
+        return targetDbRelationship.targetPkSnapshotWithSrcSnapshot(srcSnapshot, sourcePrefix);
+    }
+
     /**
      * Returns a boolean indicating whether the presence of a non-null source
      * key(s) will not guarantee a presence of a target record. PK..FK
@@ -382,9 +523,19 @@ public class ObjRelationship extends Relationship implements ConfigurationNode {
      * @since 1.1
      */
     public boolean isSourceIndependentFromTargetChange() {
-        // note - call "isToPK" at the end of the chain, since
-        // if it is to a dependent PK, we still should return true...
-        return isToMany() || isFlattened() || isToDependentEntity() || !isToPK();
+        return getTargetDbRelationship() == null;
+        /*
+
+        Fix the usages of this method below
+
+        EJBQLPathTranslator.processTerminatingRelationship: ???
+
+        PrefetchProcessorTreeBuilder.addNode: ???
+
+        HierarchicalObjectResolver.startDisjointByIdPrefetch: ???
+        SelectQueryPrefetchRouterAction.startDisjointPrefetch: ??? (uses similar logic as above)
+
+         */
     }
 
     /**
@@ -426,16 +577,10 @@ public class ObjRelationship extends Relationship implements ConfigurationNode {
      * @return flag indicating if the relationship is read only or not
      */
     public boolean isReadOnly() {
-        refreshFromDeferredPath();
-        recalculateReadOnlyValue();
-        return readOnly;
-    }
-
-    /**
-     * Returns true if the source or target entity inherits from a super entity.
-     */
-    public boolean hasSubEntity() {
-        return getSourceEntity().getSuperEntity()!=null || getTargetEntity().getSuperEntity()!=null;
+        return false;
+//        refreshFromDeferredPath();
+//        recalculateReadOnlyValue();
+//        return readOnly;
     }
 
     @Override
@@ -505,12 +650,16 @@ public class ObjRelationship extends Relationship implements ConfigurationNode {
         refreshFromDeferredPath();
 
         // build path on the fly
-        if (getDbRelationships().isEmpty()) {
+        return buildDbRelationshipPath(getDbRelationships());
+    }
+    
+    private String buildDbRelationshipPath(List<DbRelationship> dbRels) {
+        if (dbRels.isEmpty()) {
             return null;
         }
 
         StringBuilder path = new StringBuilder();
-        Iterator<DbRelationship> it = getDbRelationships().iterator();
+        Iterator<DbRelationship> it = dbRels.iterator();
         while (it.hasNext()) {
             DbRelationship next = it.next();
             path.append(next.getName());
@@ -698,7 +847,7 @@ public class ObjRelationship extends Relationship implements ConfigurationNode {
         }
 
         // not flattened or 1-step inherited relationship: always read/write
-        if (dbRelationships.size() < 2 || hasSubEntity()) {
+        if (dbRelationships.size() < 2) {
             this.readOnly = false;
             return;
         }

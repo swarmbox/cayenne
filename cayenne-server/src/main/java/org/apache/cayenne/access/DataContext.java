@@ -49,6 +49,7 @@ import org.apache.cayenne.graph.CompoundDiff;
 import org.apache.cayenne.graph.GraphDiff;
 import org.apache.cayenne.graph.GraphManager;
 import org.apache.cayenne.map.DbJoin;
+import org.apache.cayenne.map.Entity;
 import org.apache.cayenne.map.DbRelationship;
 import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
@@ -331,9 +332,10 @@ public class DataContext extends BaseContext {
 
             public boolean visitToOne(ToOneProperty property) {
                 ObjRelationship rel = property.getRelationship();
+                DbRelationship dbRel = rel.getTargetDbRelationship();
 
                 // if target doesn't propagates its key value, skip it
-                if (rel.isSourceIndependentFromTargetChange()) {
+                if (dbRel==null) {
                     return true;
                 }
 
@@ -351,9 +353,11 @@ public class DataContext extends BaseContext {
                                 + object.getObjectId() + ". Object may have been deleted externally.");
                     }
 
-                    DbRelationship dbRel = rel.getDbRelationships().get(0);
+                    String keyPrefix = rel.getPathToTargetDbRelationship();
+                    keyPrefix = keyPrefix == null ? "" : keyPrefix + Entity.PATH_SEPARATOR;
+
                     for (DbJoin join : dbRel.getJoins()) {
-                        String key = join.getSourceName();
+                        String key = keyPrefix + join.getSourceName();
                         snapshot.put(key, storedSnapshot.get(key));
                     }
 
@@ -373,9 +377,20 @@ public class DataContext extends BaseContext {
                     return true;
                 }
 
-                DbRelationship dbRel = rel.getDbRelationships().get(0);
                 Map<String, Object> fk = dbRel.srcFkSnapshotWithTargetSnapshot(idParts);
-                snapshot.putAll(fk);
+
+                String keyPrefix = rel.getPathToTargetDbRelationship();
+
+                if (keyPrefix == null) {
+                    snapshot.putAll(fk);
+                } else {
+                    keyPrefix += Entity.PATH_SEPARATOR;
+
+                    for (Map.Entry entry : fk.entrySet()) {
+                        snapshot.put(keyPrefix + entry.getKey(), entry.getValue());
+                    }
+                }
+
                 return true;
             }
         });

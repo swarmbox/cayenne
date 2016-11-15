@@ -227,13 +227,10 @@ class DataDomainQueryAction implements QueryRouter, OperationObserver {
             ObjRelationship relationship = relationshipQuery.getRelationship(domain.getEntityResolver());
 
             // check if we can derive target PK from FK...
-            if (relationship.isSourceIndependentFromTargetChange()) {
+            DbRelationship dbRelationship = relationship.getTargetDbRelationship();
+            if (dbRelationship == null) {
                 return !DONE;
             }
-
-            // we can assume that there is one and only one DbRelationship as
-            // we previously checked that "!isSourceIndependentFromTargetChange"
-            DbRelationship dbRelationship = relationship.getDbRelationships().get(0);
 
             // FK pointing to a unique field that is a 'fake' PK (CAY-1755)...
             // It is not sufficient to generate target ObjectId.
@@ -251,7 +248,7 @@ class DataDomainQueryAction implements QueryRouter, OperationObserver {
                 return !DONE;
             }
 
-            ObjectId targetId = sourceRow.createTargetObjectId(relationship.getTargetEntityName(), dbRelationship);
+            ObjectId targetId = sourceRow.createTargetObjectId(relationship.getTargetEntityName(), relationship);
 
             // null id means that FK is null...
             if (targetId == null) {

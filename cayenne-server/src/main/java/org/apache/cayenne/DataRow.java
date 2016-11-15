@@ -23,7 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.cayenne.map.DbRelationship;
+import org.apache.cayenne.map.Relationship;
 import org.apache.cayenne.util.ToStringBuilder;
 import org.apache.cayenne.util.Util;
 
@@ -119,7 +119,7 @@ public class DataRow extends HashMap<String, Object> {
      * this DataRow representing a source of relationship. Returns null if snapshot FK
      * columns indicate a null to-one relationship.
      */
-    public ObjectId createTargetObjectId(String entityName, DbRelationship relationship) {
+    public ObjectId createTargetObjectId(String entityName, Relationship relationship) {
 
         if (relationship.isToMany()) {
             throw new CayenneRuntimeException("Only 'to one' can have a target ObjectId.");

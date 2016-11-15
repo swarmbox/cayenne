@@ -367,6 +367,10 @@ public class DbRelationship extends Relationship implements ConfigurationNode {
      * snapshot is missing id components.
      */
     public Map<String, Object> targetPkSnapshotWithSrcSnapshot(Map<String, Object> srcSnapshot) {
+        return targetPkSnapshotWithSrcSnapshot(srcSnapshot, null);
+    }
+
+    public Map<String, Object> targetPkSnapshotWithSrcSnapshot(Map<String, Object> srcSnapshot, String srcPrefix) {
 
         if (isToMany()) {
             throw new CayenneRuntimeException("Only 'to one' relationships support this method.");
@@ -380,7 +384,8 @@ public class DbRelationship extends Relationship implements ConfigurationNode {
         // optimize for the most common single column join
         if (numJoins == 1) {
             DbJoin join = joins.get(0);
-            Object val = srcSnapshot.get(join.getSourceName());
+            String srcName = srcPrefix == null ? join.getSourceName() : srcPrefix + join.getSourceName();
+            Object val = srcSnapshot.get(srcName);
             if (val == null) {
                 foundNulls++;
                 idMap = Collections.EMPTY_MAP;
@@ -393,7 +398,8 @@ public class DbRelationship extends Relationship implements ConfigurationNode {
             idMap = new HashMap<>(numJoins * 2);
             for (DbJoin join : joins) {
                 DbAttribute source = join.getSource();
-                Object val = srcSnapshot.get(join.getSourceName());
+                String srcName = srcPrefix == null ? source.getName() : srcPrefix + source.getName(); //TODO Determine if its ok to add prefix indiscriminately
+                Object val = srcSnapshot.get(srcName);
 
                 if (val == null) {
 

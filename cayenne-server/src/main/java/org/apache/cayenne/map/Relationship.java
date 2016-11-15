@@ -20,11 +20,13 @@
 package org.apache.cayenne.map;
 
 import java.io.Serializable;
+import java.util.Map;
 
 import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.util.CayenneMapEntry;
 import org.apache.cayenne.util.ToStringBuilder;
 import org.apache.cayenne.util.XMLSerializable;
+import org.apache.commons.lang.NotImplementedException;
 
 /**
  * Defines a relationship between two entities. In a DataMap graph relationships represent
@@ -189,4 +191,8 @@ public abstract class Relationship implements CayenneMapEntry, XMLSerializable,
      * @since 3.1
      */
     public abstract boolean isMandatory();
+
+    public Map<String, Object> targetPkSnapshotWithSrcSnapshot(Map<String, Object> srcSnapshot) {
+        throw new NotImplementedException("method not overridden");
+    }
 }
