@@ -275,7 +275,7 @@ public class ObjAttribute extends Attribute implements ConfigurationNode {
     public void setDbAttributePath(String dbAttributePath) {
         this.dbAttributePath = dbAttributePath;
 
-        if (isInherited()) {
+        if (isInherited() && !dbAttributePath.equals(getEntity().getSuperEntity().getAttribute(getName()).getDbAttributePath())) {
             ((ObjEntity) entity).addAttributeOverride(getName(), dbAttributePath);
         }
     }
