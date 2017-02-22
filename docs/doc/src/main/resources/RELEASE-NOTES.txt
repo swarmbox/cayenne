@@ -8,12 +8,54 @@ To browse individual bug reports check out project issue tracker:
 https://issues.apache.org/jira/browse/CAY
 
 ----------------------------------
-Release: 4.0.M4
+Release: 4.0.M5
 Date:
 ----------------------------------
 Changes/New Features:
 
 CAY-1559 Use Lifecycle Annotations as markers on PersistentObject methods
+CAY-2139 Upgrade HSQLDB dependency to the most recent version (2.3.4)
+CAY-2150 Refactoring: ParameterBinding to contain ExtendedType property
+CAY-2163 Property.path() , ExpressionFactory.pathExp()
+CAY-2164 Relocate builder bootstrap methods from ServerRuntimeBuilder to ServerRuntime
+CAY-2165 Explicit "contribution" API for easier expansion of DI collections and maps
+CAY-2166 Auto-loading of Cayenne modules
+CAY-2168 Split DbLoader to parts and clean it up
+CAY-2169 Split DbMerger to parts and clean it up
+CAY-2170 MergeToken sorting is highly unstable
+CAY-2172 Cleanup Modeler import and migrate db actions
+CAY-2176 Java 7 diamond class generation templates
+CAY-2177 Sync auto generated state of PK between model and DB
+CAY-2187 Support for the scalar and aggregate SQL functions in ObjectSelect API
+CAY-2197 Update sqlite version and enable in-memory default config
+CAY-2212 cdbimport cleanup and configuration schema refactoring
+CAY-2223 JCacheQueryCache - a query cache provider to plug in JCache implementers
+CAY-2225 Extensible CacheInvalidationFilter logic
+CAY-2228 Deprecate multiple cache groups in caching and query API
+CAY-2231 Support for collections in new functional expressions and old math expressions
+CAY-2232 Proper conversion to String for new functional expressions
+CAY-2235 Deprecate Query.getDataMap() method
+
+Bug Fixes:
+
+CAY-2032 SelectAction: DistinctResultIterator ignores flattened relationships
+CAY-2137 When generating SQL from EJBQL, use "AND" to separate multiple join conditions
+CAY-2174 Change FK attribute name cause ObjAttribute appear after Reverse Engineering
+CAY-2175 AliasName used in EJBQLQuery is not working if it contains mixed case
+CAY-2183 Newly created DbRelationship is unexpectedly renamed by the Modeler
+CAY-2199 Modeler on Windows: The same project is displayed twice in "Recent Projects"
+CAY-2207 Modeler: "Java Type" and "DbAttribute Path" are not saved with using TAB to move forward
+CAY-2221 In-memory expression evaluation gives different result than select query
+CAY-2236 Modeler Migrate DB Schema: unable to Reverse All Operations
+CAY-2238 Modeler: Preserve manually set DbRelationship name when syncing with ObjEntity
+CAY-2242 Vertical Inheritance: Cannot Insert Record For Implementing Class with Attribute And Relationship
+
+----------------------------------
+Release: 4.0.M4
+Date: December 13, 2016
+----------------------------------
+Changes/New Features:
+
 CAY-2051 Applying new Reverse Engineering to the Modeler
 CAY-2053 SQLExec fluent query API
 CAY-2060 Replace Query objects in DataMap with query descriptors
@@ -44,6 +86,7 @@ CAY-2133 ObjectNameGenerator refactoring - unifying relationship name generation
 CAY-2135 cdbimport: reset DbEntity catalogs / schemas to DataMap defaults
 CAY-2136 Allow Ordering.orderedList(…) methods to accept a Collection rather than only a List
 CAY-2160 Modeler: new welcome screen
+CAY-2222 MySQLAdapter should not create indexes on FK columns
 
 Bug Fixes:
 
@@ -79,10 +122,11 @@ CAY-2150 UI bug: PK generation custom sequence is getting reset
 CAY-2151 Migrate Database Schema: issue when no db is specified
 CAY-2153 Modeler Exception in save action after reverse engineering some complex DB schema
 CAY-2154 Migrate db: queries order
+CAY-2226 PK generation for Frontbase: PK cache size must be ignored
 
 ----------------------------------
 Release: 4.0.M3
-Date:
+Date: February 12, 2016
 ----------------------------------
 Changes/New Features:
 
