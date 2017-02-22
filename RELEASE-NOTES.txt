@@ -13,6 +13,7 @@ Date: July 11, 2018
 ----------------------------------
 Changes/New Features:
 
+CAY-1559 Use Lifecycle Annotations as markers on PersistentObject methods
 CAY-1683 Injectable PkGenerator
 CAY-2304 Custom ClassLoader for Maven and Gradle plugins that use project dependencies
 CAY-2334 cgen: option to force run from maven/gradle
