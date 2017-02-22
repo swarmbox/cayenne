@@ -165,12 +165,12 @@ public class ObjEntity extends Entity implements ObjEntityListener, Configuratio
             }
         }
 
-        if (getSuperEntityName() == null && getSuperClassName() != null) {
+        if (getSuperClassName() != null) {
             encoder.print("\" superClassName=\"");
             encoder.print(getSuperClassName());
         }
 
-        if (getSuperEntityName() == null && getClientSuperClassName() != null) {
+        if (getClientSuperClassName() != null) {
             encoder.print("\" clientSuperClassName=\"");
             encoder.print(getClientSuperClassName());
         }
@@ -566,11 +566,12 @@ public class ObjEntity extends Entity implements ObjEntityListener, Configuratio
     /**
      * Returns a fully-qualified name of the super class of the DataObject
      * class. This value is used as a hint for class generation. If the entity
-     * inherits from another entity, a superclass is the class of that entity.
+     * inherits from another entity and no superclass is specified, then the
+     * superclass is the class of the super entity.
      */
     public String getSuperClassName() {
         ObjEntity superEntity = getSuperEntity();
-        return (superEntity != null) ? superEntity.getClassName() : superClassName;
+        return superClassName == null && superEntity != null ? superEntity.getClassName() : superClassName;
     }
 
     /**
