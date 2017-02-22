@@ -315,7 +315,7 @@ public class ObjEntityTab extends JPanel implements ObjEntityDisplayListener,
 
                     // if a super-entity selected, disable table selection
                     // and also update parent DbEntity selection...
-                    toggleEnabled(name == null, !serverOnly.isSelected());
+                    toggleEnabled(!serverOnly.isSelected());
                     dbEntityCombo.getModel().setSelectedItem(entity.getDbEntity());
                     superClassName.setText(entity.getSuperClassName());
 
@@ -411,7 +411,7 @@ public class ObjEntityTab extends JPanel implements ObjEntityDisplayListener,
                 ObjEntity entity = mediator.getCurrentObjEntity();
                 if (entity != null) {
                     entity.setServerOnly(serverOnly.isSelected());
-                    toggleEnabled(dbEntityCombo.isEnabled(), !serverOnly.isSelected());
+                    toggleEnabled(!serverOnly.isSelected());
                     mediator.fireObjEntityEvent(new EntityEvent(this, entity));
                 }
             }
@@ -476,7 +476,7 @@ public class ObjEntityTab extends JPanel implements ObjEntityDisplayListener,
 
         // toggle visibilty and editability rules
         toggleClientFieldsVisible(map.isClientSupported());
-        toggleEnabled(entity.getSuperEntityName() == null, !entity.isServerOnly());
+        toggleEnabled(!entity.isServerOnly());
 
         // init ObjEntities for inheritance
         Predicate inheritanceFilter = new Predicate() {
@@ -645,13 +645,9 @@ public class ObjEntityTab extends JPanel implements ObjEntityDisplayListener,
         serverOnly.setVisible(visible);
     }
 
-    void toggleEnabled(boolean directTableMapping, boolean clientFieldsEnabled) {
-        superClassName.getComponent().setEnabled(directTableMapping);
-        superclassLabel.setEnabled(directTableMapping);
-
-        clientSuperClassName.getComponent().setEnabled(
-                directTableMapping && clientFieldsEnabled);
-        clientSuperClassNameLabel.setEnabled(directTableMapping && clientFieldsEnabled);
+    void toggleEnabled(boolean clientFieldsEnabled) {
+        clientSuperClassName.getComponent().setEnabled(clientFieldsEnabled);
+        clientSuperClassNameLabel.setEnabled(clientFieldsEnabled);
 
         clientClassNameLabel.setEnabled(clientFieldsEnabled);
         clientClassName.getComponent().setEnabled(clientFieldsEnabled);
