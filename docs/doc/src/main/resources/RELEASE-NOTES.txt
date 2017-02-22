@@ -13,6 +13,7 @@ Date:
 ----------------------------------
 Changes/New Features:
 
+CAY-1559 Use Lifecycle Annotations as markers on PersistentObject methods
 CAY-2139 Upgrade HSQLDB dependency to the most recent version (2.3.4)
 CAY-2150 Refactoring: ParameterBinding to contain ExtendedType property
 CAY-2163 Property.path() , ExpressionFactory.pathExp()
