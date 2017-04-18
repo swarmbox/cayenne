@@ -125,7 +125,8 @@ class DataNodeSyncQualifierDescriptor {
 					// only care about first step in a flattened attribute
 					DbAttribute dbAttribute = (DbAttribute) attribute.getDbPathIterator().next();
 
-					if (!attributes.contains(dbAttribute)) {
+					// only use qualifier if dbEntities match
+					if (dbAttribute.getEntity() == descriptor.getDbEntity() && !attributes.contains(dbAttribute)) {
 						attributes.add(dbAttribute);
 
 						valueTransformers.add(new Transformer() {

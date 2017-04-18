@@ -646,4 +646,77 @@ public class VerticalInheritanceIT extends ServerCase {
 		assertEquals(2, ObjectSelect.query(IvImpl.class).selectCount(context));
 	}
 
+	@Test
+	public void testUpdateTwoObjectsWithMultipleAttributeAndMultipleRelationship() throws SQLException {
+		TableHelper ivOtherTable = new TableHelper(dbHelper, "IV_OTHER");
+		ivOtherTable.setColumns("ID", "NAME").setColumnTypes(Types.INTEGER, Types.VARCHAR);
+
+		TableHelper ivBaseTable = new TableHelper(dbHelper, "IV_BASE");
+		ivBaseTable.setColumns("ID", "NAME", "TYPE")
+				.setColumnTypes(Types.INTEGER, Types.VARCHAR, Types.CHAR);
+
+		TableHelper ivImplTable = new TableHelper(dbHelper, "IV_IMPL");
+		ivImplTable.setColumns("ID", "ATTR1", "ATTR2", "OTHER1_ID", "OTHER2_ID")
+				.setColumnTypes(Types.INTEGER, Types.VARCHAR, Types.VARCHAR, Types.INTEGER, Types.INTEGER);
+
+		// Insert records we want to update
+		ivOtherTable.insert(1, "other1");
+		ivOtherTable.insert(2, "other2");
+
+		ivBaseTable.insert(1, "Impl 1", "I");
+		ivBaseTable.insert(2, "Impl 2", "I");
+
+		ivImplTable.insert(1, "attr1", "attr2", 1, 2);
+		ivImplTable.insert(2, "attr1", "attr2", 1, 2);
+
+		// Fetch and update the records
+		IvOther other1 = ObjectSelect.query(IvOther.class).where(IvOther.NAME.eq("other1")).selectOne(context);
+		IvOther other2 = ObjectSelect.query(IvOther.class).where(IvOther.NAME.eq("other2")).selectOne(context);
+
+		for(IvImpl record : ObjectSelect.query(IvImpl.class).select(context)) {
+			record.setName(record.getName() + "-Change");
+			record.setAttr1(record.getAttr1() + "-Change");
+			record.setAttr2(record.getAttr2() + "-Change");
+			record.setOther1(other2);
+			record.setOther2(other1);
+		}
+
+		context.commitChanges();
+
+		// todo: add some assertions after fixing commit bug above
+
+	}
+
+	@Test
+	public void testUpdateWithOptimisticLocks() throws SQLException {
+		TableHelper ivOtherTable = new TableHelper(dbHelper, "IV_OTHER");
+		ivOtherTable.setColumns("ID", "NAME").setColumnTypes(Types.INTEGER, Types.VARCHAR);
+
+		TableHelper ivBaseWithLockTable = new TableHelper(dbHelper, "IV_BASE_WITH_LOCK");
+		ivBaseWithLockTable.setColumns("ID", "NAME", "TYPE")
+				.setColumnTypes(Types.INTEGER, Types.VARCHAR, Types.CHAR);
+
+		TableHelper ivImplWithLockTable = new TableHelper(dbHelper, "IV_IMPL_WITH_LOCK");
+		ivImplWithLockTable.setColumns("ID", "ATTR1", "OTHER1_ID")
+				.setColumnTypes(Types.INTEGER, Types.VARCHAR, Types.INTEGER);
+
+		// Insert records we want to update (will end up adding more records for final test)
+		ivOtherTable.insert(1, "other1");
+
+		ivBaseWithLockTable.insert(1, "Impl 1", "I");
+
+		ivImplWithLockTable.insert(1, "attr1", 1);
+
+		// Fetch and update the records
+		for(IvImplWithLock record : ObjectSelect.query(IvImplWithLock.class).select(context)) {
+			record.setName(record.getName() + "-Change");
+			record.setAttr1(record.getAttr1() + "-Change");
+		}
+
+		context.commitChanges();
+
+		// todo: add some assertions after fixing commit bug above
+
+	}
+
 }
