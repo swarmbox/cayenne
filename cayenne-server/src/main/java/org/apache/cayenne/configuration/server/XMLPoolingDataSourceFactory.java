@@ -72,6 +72,7 @@ public class XMLPoolingDataSourceFactory implements DataSourceFactory {
 		return DataSourceBuilder.url(descriptor.getDataSourceUrl()).driver(driver).userName(descriptor.getUserName())
 				.password(descriptor.getPassword())
 				.pool(descriptor.getMinConnections(), descriptor.getMaxConnections())
+				.validationQuery(descriptor.getValidationQuery())
 				.maxQueueWaitTime(maxQueueWaitTime).build();
 	}
 

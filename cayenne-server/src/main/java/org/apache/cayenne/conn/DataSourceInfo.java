@@ -60,6 +60,7 @@ public class DataSourceInfo implements Cloneable, Serializable, XMLSerializable 
 	protected String passwordSourceFilename = "";
 	protected final String passwordSourceModel = "Not Applicable";
 	protected String passwordSourceUrl = "";
+	protected String validationQuery = null;
 
 	@Override
 	public boolean equals(Object obj) {
@@ -130,6 +131,10 @@ public class DataSourceInfo implements Cloneable, Serializable, XMLSerializable 
 			return false;
 		}
 
+		if (!Util.nullSafeEquals(this.validationQuery, dsi.validationQuery)) {
+			return false;
+		}
+
 		return true;
 	}
 
@@ -139,7 +144,7 @@ public class DataSourceInfo implements Cloneable, Serializable, XMLSerializable 
 				dataSourceUrl, adapterClassName, minConnections,
 				maxConnections, passwordEncoderClass, passwordEncoderKey,
 				passwordLocation, passwordSourceFilename, passwordSourceModel,
-				passwordSourceUrl);
+				passwordSourceUrl, validationQuery);
 	}
 
 	/**
@@ -155,6 +160,7 @@ public class DataSourceInfo implements Cloneable, Serializable, XMLSerializable 
 		encoder.start("connectionPool")
 				.attribute("min", minConnections)
 				.attribute("max", String.valueOf(maxConnections))
+				.attribute("validationQuery", validationQuery)
 				.end();
 
 		encoder.start("login").attribute("userName", userName);
@@ -217,6 +223,14 @@ public class DataSourceInfo implements Cloneable, Serializable, XMLSerializable 
 
 	public int getMaxConnections() {
 		return maxConnections;
+	}
+
+	public void setValidationQuery(String validationQuery) {
+		this.validationQuery = validationQuery;
+	}
+
+	public String getValidationQuery() {
+		return validationQuery;
 	}
 
 	public void setUserName(String userName) {

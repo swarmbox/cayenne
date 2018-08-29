@@ -167,5 +167,10 @@ class DataSourceChildrenHandler extends NamespaceAwareNestedTagHandler {
                 throw new ConfigurationException("Non-numeric 'max' attribute '%s'", nfex, max);
             }
         }
+
+        String validationQuery = attributes.getValue("validationQuery");
+        if (validationQuery != null) {
+            dataSourceDescriptor.setValidationQuery(validationQuery);
+        }
     }
 }
