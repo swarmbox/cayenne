@@ -50,7 +50,7 @@ import java.util.Map;
  * A dynamic GraphDiff that represents a delta between object simple properties
  * at diff creation time and its current state.
  */
-class ObjectDiff extends NodeDiff {
+public class ObjectDiff extends NodeDiff {
 
     private final String entityName;
 
@@ -141,11 +141,11 @@ class ObjectDiff extends NodeDiff {
         return classDescriptor;
     }
 
-    Object getSnapshotValue(String propertyName) {
+    public Object getSnapshotValue(String propertyName) {
         return snapshot != null ? snapshot.get(propertyName) : null;
     }
 
-    ObjectId getArcSnapshotValue(String propertyName) {
+    public ObjectId getArcSnapshotValue(String propertyName) {
         Object value = arcSnapshot != null ? arcSnapshot.get(propertyName) : null;
 
         if (value instanceof Fault) {

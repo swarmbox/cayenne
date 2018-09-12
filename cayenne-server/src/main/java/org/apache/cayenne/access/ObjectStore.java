@@ -379,7 +379,7 @@ public class ObjectStore implements Serializable, SnapshotEventListener, GraphMa
      * 
      * @since 1.2
      */
-    Map<Object, ObjectDiff> getChangesByObjectId() {
+    protected Map<Object, ObjectDiff> getChangesByObjectId() {
         return changes;
     }
 
