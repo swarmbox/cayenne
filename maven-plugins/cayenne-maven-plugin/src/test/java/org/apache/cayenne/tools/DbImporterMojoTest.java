@@ -291,10 +291,10 @@ public class DbImporterMojoTest extends AbstractMojoTestCase {
         test("testJava8Types");
     }
 
-    @Test
-    public void testInheritance() throws Exception {
-        test("testInheritance");
-    }
+    //@Test
+    //public void testInheritance() throws Exception {
+    //    test("testInheritance");
+    //}
 
     @Test
     public void testAddedFlattenedRelationship() throws Exception {
