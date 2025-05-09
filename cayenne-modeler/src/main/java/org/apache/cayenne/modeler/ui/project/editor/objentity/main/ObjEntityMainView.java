@@ -209,7 +209,7 @@ public class ObjEntityMainView extends ProjectPanel implements ObjEntityDisplayL
 
                 // if a super-entity selected, disable table selection
                 // and also update parent DbEntity selection...
-                toggleEnabled(name == null);
+                toggleEnabled(true);
                 dbEntityCombo.getModel().setSelectedItem(entity.getDbEntity());
                 superClassName.setText(entity.getSuperClassName());
 

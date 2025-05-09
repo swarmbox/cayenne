@@ -34,7 +34,7 @@
     <objEntity name="Parent" className="Parent" dbEntityName="PARENT">
         <objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
     </objEntity>
-    <objEntity name="ParentSub" superEntityName="Parent" className="ParentSub">
+    <objEntity name="ParentSub" superEntityName="Parent" className="ParentSub" superClassName="Parent">
     </objEntity>
     <dbRelationship name="parent" source="CHILD" target="PARENT">
         <dbAttributePair source="parent_id" target="id"/>
