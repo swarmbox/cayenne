@@ -134,7 +134,7 @@ public class ObjEntity extends Entity<ObjEntity, ObjAttribute, ObjRelationship>
             }
         }
 
-        if (getSuperEntityName() == null && getSuperClassName() != null) {
+        if (getSuperClassName() != null) {
             encoder.attribute("superClassName", getSuperClassName());
         }
 
@@ -321,19 +321,20 @@ public class ObjEntity extends Entity<ObjEntity, ObjAttribute, ObjRelationship>
     /**
      * Returns a fully-qualified name of the super class of the Persistent
      * class. This value is used as a hint for class generation. If the entity
-     * inherits from another entity, a superclass is the class of that entity.
+     * inherits from another entity and no superclass is set, the superclass is
+     * the class of that entity.
      */
     public String getSuperClassName() {
         ObjEntity superEntity = getSuperEntity();
-        return (superEntity != null) ? superEntity.getClassName() : superClassName;
+        return superClassName == null && superEntity != null ? superEntity.getClassName() : superClassName;
     }
 
     /**
      * Sets a fully-qualified name of the super class of the Persistent class.
      * This value is used as a hint for class generation.
      * <p>
-     * <i>An attempt to set superclass on an inherited entity has no effect,
-     * since a class of the super entity is always used as a superclass.</i>
+     * <i>On an inherited entity this takes precedence over the super entity's
+     * class, which is used only when no superclass is set here.</i>
      * </p>
      */
     public void setSuperClassName(String superClassName) {

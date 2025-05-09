@@ -131,12 +131,8 @@ public class ObjEntityHandler extends NamespaceAwareNestedTagHandler {
             entity.setDeclaredLockType(ObjEntity.LOCK_TYPE_OPTIMISTIC);
         }
 
-        String superEntityName = attributes.getValue("superEntityName");
-        if (superEntityName != null) {
-            entity.setSuperEntityName(superEntityName);
-        } else {
-            entity.setSuperClassName(attributes.getValue("superClassName"));
-        }
+        entity.setSuperEntityName(attributes.getValue("superEntityName"));
+        entity.setSuperClassName(attributes.getValue("superClassName"));
         entity.setDbEntityName(attributes.getValue("dbEntityName"));
 
         map.addObjEntity(entity);

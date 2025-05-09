@@ -35,7 +35,7 @@
     <obj-entity name="Parent" className="Parent" dbEntityName="PARENT">
         <obj-attribute name="name" type="java.lang.String" db-attribute-path="NAME"/>
     </obj-entity>
-    <obj-entity name="ParentSub" superEntityName="Parent" className="ParentSub">
+    <obj-entity name="ParentSub" superEntityName="Parent" className="ParentSub" superClassName="Parent">
     </obj-entity>
     <db-relationship name="parent" source="CHILD" target="PARENT">
         <db-attribute-pair source="parent_id" target="id"/>
