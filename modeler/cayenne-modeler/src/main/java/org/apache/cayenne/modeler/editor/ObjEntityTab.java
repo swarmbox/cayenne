@@ -233,7 +233,7 @@ public class ObjEntityTab extends JPanel implements ObjEntityDisplayListener, Ex
 
                 // if a super-entity selected, disable table selection
                 // and also update parent DbEntity selection...
-                toggleEnabled(name == null);
+                toggleEnabled(true);
                 dbEntityCombo.getModel().setSelectedItem(entity.getDbEntity());
                 superClassName.setText(entity.getSuperClassName());
 
