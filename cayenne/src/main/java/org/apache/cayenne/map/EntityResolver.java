@@ -169,7 +169,7 @@ public class EntityResolver implements MappingNamespace {
                 // load annotated methods
                 for (Method m : entityClass.getDeclaredMethods()) {
                     LIFECYCLE_EVENT_MAP.forEach((eventType, annotationType) -> {
-                        if (m.getDeclaredAnnotation(annotationType) != null) {
+                        if (m.getAnnotation(annotationType) != null) {
                             callbackRegistry.addCallback(eventType, entityClass, m);
                         }
                     });
