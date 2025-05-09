@@ -23,11 +23,31 @@ import org.apache.cayenne.exp.path.CayennePath;
 import org.apache.cayenne.map.DataMap;
 import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
+import org.apache.cayenne.project.EmptyProjectNodeVisitor;
+import org.apache.cayenne.util.XMLEncoder;
 import org.junit.jupiter.api.Test;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ObjEntityHandlerTest extends BaseHandlerTest {
+
+    private DataMap parseMap(String... objEntities) throws Exception {
+        DataMap map = new DataMap();
+        for (String xml : objEntities) {
+            parse("objEntity", xml, parent -> new ObjEntityHandler(parent, map));
+        }
+        return map;
+    }
+
+    private static String encode(ObjEntity entity) {
+        StringWriter out = new StringWriter();
+        entity.encodeAsXML(new XMLEncoder(new PrintWriter(out)), new EmptyProjectNodeVisitor());
+        return out.toString();
+    }
 
     @Test
     public void load() throws Exception {
@@ -46,7 +66,7 @@ public class ObjEntityHandlerTest extends BaseHandlerTest {
         assertEquals(8, entity.getCallbackMethods().size());
         assertEquals(ObjEntity.LOCK_TYPE_OPTIMISTIC, entity.getDeclaredLockType());
         assertEquals("org.apache.cayenne.testdo.testmap.ArtistCallback", entity.getClassName());
-        assertNull(entity.getSuperClassName(), "super.class should be suppressed by super entity");
+        assertEquals("super.class", entity.getSuperClassName(), "a declared superclass is kept on an inherited entity");
         assertEquals("Artist", entity.getSuperEntityName());
         assertEquals("ARTIST_CT", entity.getDbEntityName());
 
@@ -72,4 +92,33 @@ public class ObjEntityHandlerTest extends BaseHandlerTest {
         assertEquals("parent.child.name", override.value());
     }
 
+    @Test
+    public void superClassNameRoundTrip() throws Exception {
+        DataMap map = parseMap("""
+                <objEntity name="Parent" className="org.example.Parent"/>
+                """, """
+                <objEntity name="Inherited" superEntityName="Parent" className="org.example.Inherited"/>
+                """, """
+                <objEntity name="Overridden" superEntityName="Parent" className="org.example.Overridden"
+                           superClassName="org.example.OverrideBase"/>
+                """, """
+                <objEntity name="Plain" className="org.example.Plain" superClassName="org.example.Base"/>
+                """);
+
+        assertEquals("org.example.Parent", map.getObjEntity("Inherited").getSuperClassName());
+        assertEquals("org.example.OverrideBase", map.getObjEntity("Overridden").getSuperClassName());
+        assertEquals("org.example.Base", map.getObjEntity("Plain").getSuperClassName());
+
+        // saving writes the inherited superclass of an entity that declares none
+        assertTrue(encode(map.getObjEntity("Inherited")).contains("superClassName=\"org.example.Parent\""));
+
+        DataMap reloaded = parseMap(map.getObjEntities().stream().map(ObjEntityHandlerTest::encode)
+                .toArray(String[]::new));
+        for (String name : List.of("Inherited", "Overridden", "Plain")) {
+            ObjEntity entity = map.getObjEntity(name);
+            ObjEntity reloadedEntity = reloaded.getObjEntity(name);
+            assertEquals(entity.getSuperClassName(), reloadedEntity.getSuperClassName(), name);
+            assertEquals(encode(entity), encode(reloadedEntity), name);
+        }
+    }
 }

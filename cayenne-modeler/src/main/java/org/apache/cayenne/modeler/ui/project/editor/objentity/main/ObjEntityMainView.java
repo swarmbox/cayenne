@@ -68,7 +68,6 @@ public class ObjEntityMainView extends ProjectPanel implements ObjEntityDisplayL
     private final CMUndoableTextField name;
     private final CMUndoableTextField className;
 
-    private JLabel superclassLabel;
     private final CMUndoableTextField superClassName;
     private final CMUndoableTextField qualifier;
     private final CMComboBox<DbEntity> dbEntityCombo;
@@ -133,7 +132,7 @@ public class ObjEntityMainView extends ProjectPanel implements ObjEntityDisplayL
         builder.append("Inheritance:", superEntityCombo);
         builder.append(tableLabel, dbEntityCombo);
         builder.append("Java Class:", className);
-        superclassLabel = builder.append("Superclass:", superClassName);
+        builder.append("Superclass:", superClassName);
         builder.append("Qualifier:", qualifier);
         builder.append("Read-Only:", flags);
         builder.append("Comment:", comment);
@@ -207,9 +206,8 @@ public class ObjEntityMainView extends ProjectPanel implements ObjEntityDisplayL
                     dbEntityCombo.getModel().setSelectedItem(null);
                 }
 
-                // if a super-entity selected, disable table selection
-                // and also update parent DbEntity selection...
-                toggleEnabled(name == null);
+                // update parent DbEntity selection, and the superclass shown (the super entity's class, unless the
+                // entity declares an override)
                 dbEntityCombo.getModel().setSelectedItem(entity.getDbEntity());
                 superClassName.setText(entity.getSuperClassName());
 
@@ -293,9 +291,6 @@ public class ObjEntityMainView extends ProjectPanel implements ObjEntityDisplayL
 
         boolean isUsedInheritance = entity.getSuperEntity() != null;
         dbEntityCombo.setEnabled(!isUsedInheritance);
-
-        // toggle visibility and editability rules
-        toggleEnabled(entity.getSuperEntityName() == null);
 
         // do not show this entity or any of the subentities
         List<ObjEntity> objEntities = map.getObjEntities().stream()
@@ -391,11 +386,6 @@ public class ObjEntityMainView extends ProjectPanel implements ObjEntityDisplayL
             // there is an entity with the same name
             throw new ValidationException("There is another entity with name '" + newName + "'.");
         }
-    }
-
-    void toggleEnabled(boolean directTableMapping) {
-        superClassName.setEnabled(directTableMapping);
-        superclassLabel.setEnabled(directTableMapping);
     }
 
     public void processExistingSelection(EventObject e) {
