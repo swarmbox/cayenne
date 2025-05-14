@@ -133,12 +133,17 @@ class HierarchicalObjectResolver {
             ObjRelationship relationship = processorNode.getIncoming().getRelationship();
 
             List<DbRelationship> dbRelationships = relationship.getDbRelationships();
-            CayennePath pathPrefix = CayennePath.EMPTY_PATH;
-            if (dbRelationships.size() > 1) {
-                // we need path prefix for flattened relationships
-                for (int i = dbRelationships.size() - 1; i >= 1; i--) {
-                    pathPrefix = pathPrefix.dot(dbRelationships.get(i).getReverseRelationship().getName());
-                }
+            int selectedHop = findFkRelationshipIndex(dbRelationships);
+
+            // 'forward' flattened path prefix to read the FK off of the DataRow
+            CayennePath readKeyPrefix = CayennePath.EMPTY_PATH;
+            for (int i = 0; i < selectedHop; i++) {
+                readKeyPrefix = readKeyPrefix.dot(dbRelationships.get(i).getName());
+            }
+            // 'backward' flattened path prefix to get from the prefetch target back to the join's target column
+            CayennePath qualifierPrefix = CayennePath.EMPTY_PATH;
+            for (int i = dbRelationships.size() - 1; i > selectedHop; i--) {
+                qualifierPrefix = qualifierPrefix.dot(dbRelationships.get(i).getReverseRelationship().getName());
             }
 
             List<DataRow> parentDataRows;
@@ -159,7 +164,7 @@ class HierarchicalObjectResolver {
 
             int maxIdQualifierSize = context.getChannel().getDataDomain().getMaxIdQualifierSize();
             List<DbJoin> joins = getDbJoins(relationship);
-            Map<DbJoin, String> joinToDataRowKey = getDataRowKeys(joins, pathPrefix);
+            Map<DbJoin, String> joinToDataRowKey = getDataRowKeys(joins, readKeyPrefix);
 
             List<PrefetchSelectQuery<DataRow>> queries = new ArrayList<>();
             PrefetchSelectQuery<DataRow> currentQuery = null;
@@ -171,7 +176,7 @@ class HierarchicalObjectResolver {
                 if (currentQuery == null
                         || (maxIdQualifierSize > 0 && qualifiersCount + joins.size() > maxIdQualifierSize)) {
 
-                    createDisjointByIdPrefetchQualifier(pathPrefix, currentQuery, joins, values);
+                    createDisjointByIdPrefetchQualifier(qualifierPrefix, currentQuery, joins, values);
 
                     currentQuery = new PrefetchSelectQuery<>(node.getPath(), relationship);
                     currentQuery.fetchDataRows();
@@ -192,7 +197,7 @@ class HierarchicalObjectResolver {
                 }
             }
             // add final part of values
-            createDisjointByIdPrefetchQualifier(pathPrefix, currentQuery, joins, values);
+            createDisjointByIdPrefetchQualifier(qualifierPrefix, currentQuery, joins, values);
 
             PrefetchTreeNode jointSubtree = node.cloneJointSubtree();
 
@@ -223,36 +228,38 @@ class HierarchicalObjectResolver {
         private List<DbJoin> getDbJoins(ObjRelationship relationship) {
             // we get the part of the relationship path that contains FK
             List<DbRelationship> dbRelationships = relationship.getDbRelationships();
-            if(relationship.isToMany() || !relationship.isToPK()) {
-                return dbRelationships.get(0).getJoins();
-            } else {
-                return dbRelationships.get(dbRelationships.size() - 1).getJoins();
+            return dbRelationships.get(findFkRelationshipIndex(dbRelationships)).getJoins();
+        }
+
+        // Identifies the db-relationship that carries the foreign key
+        private int findFkRelationshipIndex(List<DbRelationship> dbRelationships) {
+            int lastIndex = dbRelationships.size() - 1;
+            for (int i = 0; i < lastIndex; i++) {
+                DbRelationship r = dbRelationships.get(i);
+                if (r.isToMany() || !r.isToPK()) {
+                    return i;
+                }
             }
+            return lastIndex;
         }
 
         /**
          * precalculate join to a DataRow key
          * @param joins to get key from
-         * @param pathPrefix for the flattened path
+         * @param readKeyPrefix for the flattened path
          * @return mapping of DbJoin to DataRow key to use
          */
-        private Map<DbJoin, String> getDataRowKeys(List<DbJoin> joins, CayennePath pathPrefix) {
+        private Map<DbJoin, String> getDataRowKeys(List<DbJoin> joins, CayennePath readKeyPrefix) {
             Map<DbJoin, String> joinToDataRowKey = joins.size() == 1
-                    ? new SingleEntryMap<>(joins.get(0))
+                    ? new SingleEntryMap<>(joins.getFirst())
                     : new HashMap<>(joins.size());
             for (DbJoin join : joins) {
-                String dataRowKey;
-                if(join.getRelationship().isToMany() || !join.getRelationship().isToPK()) {
-                    dataRowKey = join.getSourceName();
-                } else {
-                    dataRowKey = pathPrefix.dot(join.getSourceName()).value();
-                }
-                joinToDataRowKey.put(join, dataRowKey);
+                joinToDataRowKey.put(join, readKeyPrefix.dot(join.getSourceName()).value());
             }
             return joinToDataRowKey;
         }
 
-        private void createDisjointByIdPrefetchQualifier(CayennePath pathPrefix, PrefetchSelectQuery<?> currentQuery,
+        private void createDisjointByIdPrefetchQualifier(CayennePath qualifierPrefix, PrefetchSelectQuery<?> currentQuery,
                                                          List<DbJoin> joins, Set<List<Object>> values) {
             if (currentQuery == null) return;
 
@@ -261,7 +268,7 @@ class HierarchicalObjectResolver {
              // Results in SQL:  ... targetField IN ( ?, ?, ?, .... )
             if (joins.size() == 1 && values.size() > 1) {
                 currentQuery.and( ExpressionFactory.inDbExp(
-                    pathPrefix.dot(joins.get(0).getTargetName()).value(),
+                    qualifierPrefix.dot(joins.getFirst().getTargetName()).value(),
                     values.stream().flatMap(List::stream).collect(Collectors.toSet())
                 ));
             } else { // Handle a single value or compound prefetch ID predicates
@@ -273,7 +280,7 @@ class HierarchicalObjectResolver {
                     allJoinsQualifier = null;
                     for(int j=0; j<joins.size(); j++) {
                         Expression joinQualifier = ExpressionFactory
-                                .matchDbExp(pathPrefix.dot(joins.get(j).getTargetName()).value(), joinValues.get(j));
+                                .matchDbExp(qualifierPrefix.dot(joins.get(j).getTargetName()).value(), joinValues.get(j));
                         if (allJoinsQualifier == null) {
                             allJoinsQualifier = joinQualifier;
                         } else {

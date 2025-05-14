@@ -976,6 +976,66 @@ public class VerticalInheritanceIT {
 	}
 
 	/**
+	 * @link https://issues.apache.org/jira/browse/CAY-2855
+	 */
+	@Test
+	public void implFkJointPrefetchBelongsTo() throws SQLException {
+		TableHelper ivOtherTable = env.table("IV_OTHER", "ID", "NAME");
+		TableHelper ivBaseTable = env.table("IV_BASE", "ID", "NAME", "TYPE");
+		TableHelper ivImplTable = env.table("IV_IMPL", "ID", "ATTR1", "OTHER1_ID");
+
+		ivOtherTable.insert(1, "other1");
+		ivBaseTable.insert(1, "Impl 1", "I");
+		ivImplTable.insert(1, "attr1", 1);
+
+		IvImpl impl = ObjectSelect.query(IvImpl.class)
+								  .prefetch(IvImpl.OTHER1.joint())
+								  .selectOne(env.context());
+		assertNotNull(impl);
+		assertNotNull(impl.getOther1());
+	}
+
+	/**
+	 * @link https://issues.apache.org/jira/browse/CAY-2855
+	 */
+	@Test
+	public void implFkDisjointPrefetchBelongsTo() throws SQLException {
+		TableHelper ivOtherTable = env.table("IV_OTHER", "ID", "NAME");
+		TableHelper ivBaseTable = env.table("IV_BASE", "ID", "NAME", "TYPE");
+		TableHelper ivImplTable = env.table("IV_IMPL", "ID", "ATTR1", "OTHER1_ID");
+
+		ivOtherTable.insert(1, "other1");
+		ivBaseTable.insert(1, "Impl 1", "I");
+		ivImplTable.insert(1, "attr1", 1);
+
+		IvImpl impl = ObjectSelect.query(IvImpl.class)
+								  .prefetch(IvImpl.OTHER1.disjoint())
+								  .selectOne(env.context());
+		assertNotNull(impl);
+		assertNotNull(impl.getOther1());
+	}
+
+	/**
+	 * @link https://issues.apache.org/jira/browse/CAY-2855
+	 */
+	@Test
+	public void implFkDisjointByIdPrefetchBelongsTo() throws SQLException {
+		TableHelper ivOtherTable = env.table("IV_OTHER", "ID", "NAME");
+		TableHelper ivBaseTable = env.table("IV_BASE", "ID", "NAME", "TYPE");
+		TableHelper ivImplTable = env.table("IV_IMPL", "ID", "ATTR1", "OTHER1_ID");
+
+		ivOtherTable.insert(1, "other1");
+		ivBaseTable.insert(1, "Impl 1", "I");
+		ivImplTable.insert(1, "attr1", 1);
+
+		IvImpl impl = ObjectSelect.query(IvImpl.class)
+									.prefetch(IvImpl.OTHER1.disjointById())
+									.selectOne(env.context());
+		assertNotNull(impl);
+        assertNotNull(impl.getOther1());
+	}
+
+	/**
 	 * @link https://issues.apache.org/jira/browse/CAY-2282
 	 */
 	@Test
