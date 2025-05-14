@@ -1065,6 +1065,81 @@ public class VerticalInheritanceIT extends RuntimeCase {
 	}
 
 	/**
+	 * @link https://issues.apache.org/jira/browse/CAY-2855
+	 */
+	@Test
+	public void testImplFkJointPrefetchBelongsTo() throws SQLException {
+		TableHelper ivOtherTable = new TableHelper(dbHelper, "IV_OTHER");
+		ivOtherTable.setColumns("ID", "NAME").setColumnTypes(Types.INTEGER, Types.VARCHAR);
+
+		TableHelper ivBaseTable = new TableHelper(dbHelper, "IV_BASE");
+		ivBaseTable.setColumns("ID", "NAME", "TYPE").setColumnTypes(Types.INTEGER, Types.VARCHAR, Types.CHAR);
+
+		TableHelper ivImplTable = new TableHelper(dbHelper, "IV_IMPL");
+		ivImplTable.setColumns("ID", "ATTR1", "OTHER1_ID").setColumnTypes(Types.INTEGER, Types.VARCHAR,  Types.INTEGER);
+
+		ivOtherTable.insert(1, "other1");
+		ivBaseTable.insert(1, "Impl 1", "I");
+		ivImplTable.insert(1, "attr1", 1);
+
+		IvImpl impl = ObjectSelect.query(IvImpl.class)
+								  .prefetch(IvImpl.OTHER1.joint())
+								  .selectOne(context);
+		assertNotNull(impl);
+		assertNotNull(impl.getOther1());
+	}
+
+	/**
+	 * @link https://issues.apache.org/jira/browse/CAY-2855
+	 */
+	@Test
+	public void testImplFkDisjointPrefetchBelongsTo() throws SQLException {
+		TableHelper ivOtherTable = new TableHelper(dbHelper, "IV_OTHER");
+		ivOtherTable.setColumns("ID", "NAME").setColumnTypes(Types.INTEGER, Types.VARCHAR);
+
+		TableHelper ivBaseTable = new TableHelper(dbHelper, "IV_BASE");
+		ivBaseTable.setColumns("ID", "NAME", "TYPE").setColumnTypes(Types.INTEGER, Types.VARCHAR, Types.CHAR);
+
+		TableHelper ivImplTable = new TableHelper(dbHelper, "IV_IMPL");
+		ivImplTable.setColumns("ID", "ATTR1", "OTHER1_ID").setColumnTypes(Types.INTEGER, Types.VARCHAR,  Types.INTEGER);
+
+		ivOtherTable.insert(1, "other1");
+		ivBaseTable.insert(1, "Impl 1", "I");
+		ivImplTable.insert(1, "attr1", 1);
+
+		IvImpl impl = ObjectSelect.query(IvImpl.class)
+								  .prefetch(IvImpl.OTHER1.disjoint())
+								  .selectOne(context);
+		assertNotNull(impl);
+		assertNotNull(impl.getOther1());
+	}
+
+	/**
+	 * @link https://issues.apache.org/jira/browse/CAY-2855
+	 */
+	@Test
+	public void testImplFkDisjointByIdPrefetchBelongsTo() throws SQLException {
+		TableHelper ivOtherTable = new TableHelper(dbHelper, "IV_OTHER");
+		ivOtherTable.setColumns("ID", "NAME").setColumnTypes(Types.INTEGER, Types.VARCHAR);
+
+		TableHelper ivBaseTable = new TableHelper(dbHelper, "IV_BASE");
+		ivBaseTable.setColumns("ID", "NAME", "TYPE").setColumnTypes(Types.INTEGER, Types.VARCHAR, Types.CHAR);
+
+		TableHelper ivImplTable = new TableHelper(dbHelper, "IV_IMPL");
+		ivImplTable.setColumns("ID", "ATTR1", "OTHER1_ID").setColumnTypes(Types.INTEGER, Types.VARCHAR,  Types.INTEGER);
+
+		ivOtherTable.insert(1, "other1");
+		ivBaseTable.insert(1, "Impl 1", "I");
+		ivImplTable.insert(1, "attr1", 1);
+
+		IvImpl impl = ObjectSelect.query(IvImpl.class)
+									.prefetch(IvImpl.OTHER1.disjointById())
+									.selectOne(context);
+		assertNotNull(impl);
+        assertNotNull(impl.getOther1());
+	}
+
+	/**
 	 * @link https://issues.apache.org/jira/browse/CAY-2282
 	 */
 	@Test
