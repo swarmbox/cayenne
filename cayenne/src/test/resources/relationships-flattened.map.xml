@@ -55,6 +55,27 @@
 		<dbAttribute name="FT5_ID" type="INTEGER" primaryKey="true" mandatory="true"/>
 		<dbAttribute name="NAME" type="VARCHAR" mandatory="true" length="100"/>
 	</dbEntity>
+	<dbEntity name="TO_ONE_HOP_CHILD">
+		<dbAttribute name="EXT2_ID" type="INTEGER"/>
+		<dbAttribute name="EXT_ID" type="INTEGER"/>
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
+		<dbAttribute name="REF_ID" type="INTEGER"/>
+	</dbEntity>
+	<dbEntity name="TO_ONE_HOP_EXT">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+	</dbEntity>
+	<dbEntity name="TO_ONE_HOP_EXT2">
+		<dbAttribute name="PARENT_ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+	</dbEntity>
+	<dbEntity name="TO_ONE_HOP_PARENT">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
+		<dbAttribute name="REF_ID" type="INTEGER"/>
+	</dbEntity>
+	<dbEntity name="TO_ONE_HOP_REF">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+	</dbEntity>
 	<objEntity name="Entity1" className="org.apache.cayenne.testdo.relationships_flattened.Entity1" dbEntityName="ENTITY1"/>
 	<objEntity name="Entity2" className="org.apache.cayenne.testdo.relationships_flattened.Entity2" dbEntityName="ENTITY2"/>
 	<objEntity name="Entity3" className="org.apache.cayenne.testdo.relationships_flattened.Entity3" dbEntityName="ENTITY3"/>
@@ -74,6 +95,16 @@
 	<objEntity name="FlattenedTest5" className="org.apache.cayenne.testdo.relationships_flattened.FlattenedTest5" dbEntityName="FLATTENED_TEST_5">
 		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
 	</objEntity>
+	<objEntity name="ToOneHopChild" dbEntityName="TO_ONE_HOP_CHILD">
+		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+	</objEntity>
+	<objEntity name="ToOneHopParent" dbEntityName="TO_ONE_HOP_PARENT">
+		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+	</objEntity>
+	<objEntity name="ToOneHopParentRef" dbEntityName="TO_ONE_HOP_PARENT">
+		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+	</objEntity>
+	<objEntity name="ToOneHopRef" dbEntityName="TO_ONE_HOP_REF"/>
 	<dbRelationship name="toFT1" source="COMPLEX_JOIN" target="FLATTENED_TEST_1">
 		<dbAttributePair source="FT1_FK" target="FT1_ID"/>
 	</dbRelationship>
@@ -140,6 +171,42 @@
 	<dbRelationship name="complexJoin2" source="FLATTENED_TEST_5" target="COMPLEX_JOIN2">
 		<dbAttributePair source="FT5_ID" target="FT5_FK"/>
 	</dbRelationship>
+	<dbRelationship name="toExt" source="TO_ONE_HOP_CHILD" target="TO_ONE_HOP_EXT">
+		<dbAttributePair source="EXT_ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="toExt2" source="TO_ONE_HOP_CHILD" target="TO_ONE_HOP_EXT2">
+		<dbAttributePair source="EXT2_ID" target="PARENT_ID"/>
+	</dbRelationship>
+	<dbRelationship name="toRef" source="TO_ONE_HOP_CHILD" target="TO_ONE_HOP_REF">
+		<dbAttributePair source="REF_ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="children" source="TO_ONE_HOP_EXT" target="TO_ONE_HOP_CHILD" toMany="true">
+		<dbAttributePair source="ID" target="EXT_ID"/>
+	</dbRelationship>
+	<dbRelationship name="toParent" source="TO_ONE_HOP_EXT" target="TO_ONE_HOP_PARENT">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="children" source="TO_ONE_HOP_EXT2" target="TO_ONE_HOP_CHILD" toMany="true">
+		<dbAttributePair source="PARENT_ID" target="EXT2_ID"/>
+	</dbRelationship>
+	<dbRelationship name="toParent" source="TO_ONE_HOP_EXT2" target="TO_ONE_HOP_PARENT">
+		<dbAttributePair source="PARENT_ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="toExt" source="TO_ONE_HOP_PARENT" target="TO_ONE_HOP_EXT" toDependentPK="true">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="toExt2" source="TO_ONE_HOP_PARENT" target="TO_ONE_HOP_EXT2" toDependentPK="true">
+		<dbAttributePair source="ID" target="PARENT_ID"/>
+	</dbRelationship>
+	<dbRelationship name="toRef" source="TO_ONE_HOP_PARENT" target="TO_ONE_HOP_REF">
+		<dbAttributePair source="REF_ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="children" source="TO_ONE_HOP_REF" target="TO_ONE_HOP_CHILD" toMany="true">
+		<dbAttributePair source="ID" target="REF_ID"/>
+	</dbRelationship>
+	<dbRelationship name="parents" source="TO_ONE_HOP_REF" target="TO_ONE_HOP_PARENT" toMany="true">
+		<dbAttributePair source="ID" target="REF_ID"/>
+	</dbRelationship>
 	<objRelationship name="toEntity3" source="Entity1" target="Entity3" deleteRule="nullify" dbRelationshipPath="toEntity2.toEntity3"/>
 	<objRelationship name="side1s" source="FlattenedCircular" target="FlattenedCircular" dbRelationshipPath="side1s.side1"/>
 	<objRelationship name="side2s" source="FlattenedCircular" target="FlattenedCircular" dbRelationshipPath="side2s.side2"/>
@@ -155,4 +222,9 @@
 	<objRelationship name="toFT2" source="FlattenedTest3" target="FlattenedTest2" dbRelationshipPath="toFT2"/>
 	<objRelationship name="toFT3" source="FlattenedTest4" target="FlattenedTest3" dbRelationshipPath="toFT3"/>
 	<objRelationship name="toFT1" source="FlattenedTest5" target="FlattenedTest1" deleteRule="nullify" dbRelationshipPath="complexJoin2.toFT1"/>
+	<objRelationship name="childrenViaExt" source="ToOneHopParent" target="ToOneHopChild" dbRelationshipPath="toExt.children"/>
+	<objRelationship name="childrenViaExt2" source="ToOneHopParent" target="ToOneHopChild" dbRelationshipPath="toExt2.children"/>
+	<objRelationship name="childrenViaRef" source="ToOneHopParent" target="ToOneHopChild" dbRelationshipPath="toRef.children"/>
+	<objRelationship name="childrenViaRef" source="ToOneHopParentRef" target="ToOneHopChild" dbRelationshipPath="toRef.children"/>
+	<objRelationship name="ref" source="ToOneHopParentRef" target="ToOneHopRef" dbRelationshipPath="toRef"/>
 </dataMap>
