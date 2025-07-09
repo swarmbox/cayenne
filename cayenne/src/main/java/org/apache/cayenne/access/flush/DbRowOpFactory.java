@@ -112,6 +112,14 @@ class DbRowOpFactory {
         return descriptor;
     }
 
+    /**
+     * The resolver, for looking up a descriptor other than the diff's own. {@link #getDescriptor()} is the
+     * <em>diff's</em> descriptor, which is the wrong one when a question is about an arc's target.
+     */
+    EntityResolver getResolver() {
+        return resolver;
+    }
+
     Persistent getObject() {
         return object;
     }

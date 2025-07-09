@@ -26,6 +26,7 @@ import org.apache.cayenne.access.flush.operation.GraphBasedDbRowOpSorter;
 import org.apache.cayenne.query.ColumnSelect;
 import org.apache.cayenne.query.ObjectSelect;
 import org.apache.cayenne.query.PrefetchTreeNode;
+import org.apache.cayenne.query.SelectById;
 import org.apache.cayenne.runtime.CayenneRuntime;
 import org.apache.cayenne.test.jdbc.TableHelper;
 import org.apache.cayenne.testdo.inheritance_vertical.*;
@@ -1334,4 +1335,230 @@ public class VerticalInheritanceIT {
 		assertInstanceOf(IvSub3.class, row[0]);
 		assertEquals("sub3name", row[1], () -> "scalar slot held " + row[1] + ", segment offset is wrong");
 	}
+	/** The belongs-to transition this covers: null -> impl 2. */
+	@Test
+	public void updateBelongsToWithFkOnChildTableNullToImpl() throws SQLException {
+		TableHelper ivBaseTable = env.table("IV_BASE", "ID", "NAME", "TYPE");
+		TableHelper ivImplTable = env.table("IV_IMPL", "ID", "ATTR1", "BASE_ID");
+
+		ivBaseTable.insert(1, "Base 1", "I");
+		ivImplTable.insert(1, "Impl 1", null);
+
+		ivBaseTable.insert(2, "Base 2", "I");
+		ivImplTable.insert(2, "Impl 2", null);
+
+		IvImpl impl1 = SelectById.queryId(IvImpl.class, 1).selectOne(env.context());
+		IvImpl impl2 = SelectById.queryId(IvImpl.class, 2).selectOne(env.context());
+
+		impl1.setRelatedImpl(impl2);
+		env.context().commitChanges();
+
+		ObjectContext cleanContext = runtime.newContext();
+		IvImpl impl1Fetched = SelectById.queryId(IvImpl.class, 1).selectOne(cleanContext);
+		IvImpl impl2Fetched = SelectById.queryId(IvImpl.class, 2).selectOne(cleanContext);
+
+		assertEquals(impl2Fetched, impl1Fetched.getRelatedImpl());
+
+		assertEquals("Impl 1", impl1Fetched.getAttr1());
+		assertEquals("Impl 2", impl2Fetched.getAttr1());
+	}
+
+	/** The belongs-to transition this covers: impl 2 -> impl 3. */
+	@Test
+	public void updateBelongsToWithFkOnChildTableImplTwoToImplThree() throws SQLException {
+		TableHelper ivBaseTable = env.table("IV_BASE", "ID", "NAME", "TYPE");
+		TableHelper ivImplTable = env.table("IV_IMPL", "ID", "ATTR1", "BASE_ID");
+
+		ivBaseTable.insert(2, "Base 2", "I");
+		ivImplTable.insert(2, "Impl 2", null);
+
+		ivBaseTable.insert(3, "Base 3", "I");
+		ivImplTable.insert(3, "Impl 3", null);
+
+		ivBaseTable.insert(1, "Base 1", "I");
+		ivImplTable.insert(1, "Impl 1", 2);
+
+		IvImpl impl1 = SelectById.queryId(IvImpl.class, 1).selectOne(env.context());
+		IvImpl impl3 = SelectById.queryId(IvImpl.class, 3).selectOne(env.context());
+
+		impl1.setRelatedImpl(impl3);
+		env.context().commitChanges();
+
+		ObjectContext cleanContext = runtime.newContext();
+		IvImpl impl1Fetched = SelectById.queryId(IvImpl.class, 1).selectOne(cleanContext);
+		IvImpl impl2Fetched = SelectById.queryId(IvImpl.class, 2).selectOne(cleanContext);
+		IvImpl impl3Fetched = SelectById.queryId(IvImpl.class, 3).selectOne(cleanContext);
+
+		assertEquals(impl3Fetched, impl1Fetched.getRelatedImpl());
+
+		assertEquals("Impl 1", impl1Fetched.getAttr1());
+		assertEquals("Impl 2", impl2Fetched.getAttr1());
+		assertEquals("Impl 3", impl3Fetched.getAttr1());
+	}
+
+	/** The belongs-to transition this covers: impl 3 -> impl 2. */
+	@Test
+	public void updateBelongsToWithFkOnChildTableImplThreeToImplTwo() throws SQLException {
+		TableHelper ivBaseTable = env.table("IV_BASE", "ID", "NAME", "TYPE");
+		TableHelper ivImplTable = env.table("IV_IMPL", "ID", "ATTR1", "BASE_ID");
+
+		ivBaseTable.insert(2, "Base 2", "I");
+		ivImplTable.insert(2, "Impl 2", null);
+
+		ivBaseTable.insert(3, "Base 3", "I");
+		ivImplTable.insert(3, "Impl 3", null);
+
+		ivBaseTable.insert(1, "Base 1", "I");
+		ivImplTable.insert(1, "Impl 1", 3);
+
+		IvImpl impl1 = SelectById.queryId(IvImpl.class, 1).selectOne(env.context());
+		IvImpl impl2 = SelectById.queryId(IvImpl.class, 2).selectOne(env.context());
+
+		impl1.setRelatedImpl(impl2);
+		env.context().commitChanges();
+
+		ObjectContext cleanContext = runtime.newContext();
+		IvImpl impl1Fetched = SelectById.queryId(IvImpl.class, 1).selectOne(cleanContext);
+		IvImpl impl2Fetched = SelectById.queryId(IvImpl.class, 2).selectOne(cleanContext);
+		IvImpl impl3Fetched = SelectById.queryId(IvImpl.class, 3).selectOne(cleanContext);
+
+		assertEquals(impl2Fetched, impl1Fetched.getRelatedImpl());
+
+		assertEquals("Impl 1", impl1Fetched.getAttr1());
+		assertEquals("Impl 2", impl2Fetched.getAttr1());
+		assertEquals("Impl 3", impl3Fetched.getAttr1());
+	}
+
+	/** The belongs-to transition this covers: impl 2 -> null. */
+	@Test
+	public void updateBelongsToWithFkOnChildTableImplToNull() throws SQLException {
+		TableHelper ivBaseTable = env.table("IV_BASE", "ID", "NAME", "TYPE");
+		TableHelper ivImplTable = env.table("IV_IMPL", "ID", "ATTR1", "BASE_ID");
+
+		ivBaseTable.insert(2, "Base 2", "I");
+		ivImplTable.insert(2, "Impl 2", null);
+
+		ivBaseTable.insert(1, "Base 1", "I");
+		ivImplTable.insert(1, "Impl 1", 2);
+
+		IvImpl impl1 = SelectById.queryId(IvImpl.class, 1).selectOne(env.context());
+
+		impl1.setRelatedImpl(null);
+		env.context().commitChanges();
+
+		ObjectContext cleanContext = runtime.newContext();
+		IvImpl impl1Fetched = SelectById.queryId(IvImpl.class, 1).selectOne(cleanContext);
+		IvImpl impl2Fetched = SelectById.queryId(IvImpl.class, 2).selectOne(cleanContext);
+
+		assertNull(impl1Fetched.getRelatedImpl());
+
+		assertEquals("Impl 1", impl1Fetched.getAttr1());
+		assertEquals("Impl 2", impl2Fetched.getAttr1());
+	}
+
+	@Test
+	public void updateOneToOneChildToChildNullToValue() throws SQLException {
+		TableHelper ivRootTable = env.table("IV_ROOT", "ID", "DISCRIMINATOR");
+		TableHelper ivSub1Table = env.table("IV_SUB1", "ID", "SUB1_NAME", "SUB2_ID");
+		TableHelper ivSub2Table = env.table("IV_SUB2", "ID", "SUB2_NAME");
+
+		ivRootTable.insert(1, "IvSub1");
+		ivRootTable.insert(2, "IvSub2");
+
+		ivSub2Table.insert(2, "Two");
+
+		ivSub1Table.insert(1, "One", null);
+
+		IvSub1 ivSub1 = SelectById.queryId(IvSub1.class, 1).selectOne(env.context());
+		IvSub2 ivSub2 = SelectById.queryId(IvSub2.class, 2).selectOne(env.context());
+
+		ivSub1.setRelatedSub2(ivSub2);
+		env.context().commitChanges();
+
+		ObjectContext cleanContext = runtime.newContext();
+
+		IvSub1 ivSub1Fetched = SelectById.queryId(IvSub1.class, 1).selectOne(cleanContext);
+		IvSub2 ivSub2Fetched = SelectById.queryId(IvSub2.class, 2).selectOne(cleanContext);
+
+		assertEquals(ivSub1Fetched.getRelatedSub2(), ivSub2Fetched);
+
+		assertEquals(2, ivRootTable.getRowCount());
+		assertEquals(1, ivSub1Table.getRowCount());
+		assertEquals(1, ivSub2Table.getRowCount());
+
+		assertEquals("One", ivSub1Fetched.getSub1Name());
+		assertEquals("Two", ivSub2Fetched.getSub2Name());
+	}
+
+	@Test
+	public void updateOneToOneChildToChildValueToValue() throws SQLException {
+		TableHelper ivRootTable = env.table("IV_ROOT", "ID", "DISCRIMINATOR");
+		TableHelper ivSub1Table = env.table("IV_SUB1", "ID", "SUB1_NAME", "SUB2_ID");
+		TableHelper ivSub2Table = env.table("IV_SUB2", "ID", "SUB2_NAME");
+
+		ivRootTable.insert(1, "IvSub1");
+		ivRootTable.insert(2, "IvSub2");
+		ivRootTable.insert(3, "IvSub2");
+
+		ivSub2Table.insert(2, "Two");
+		ivSub2Table.insert(3, "Three");
+
+		ivSub1Table.insert(1, "One", 2);
+
+		IvSub1 ivSub1 = SelectById.queryId(IvSub1.class, 1).selectOne(env.context());
+		IvSub2 ivSub22 = SelectById.queryId(IvSub2.class, 3).selectOne(env.context());
+
+		ivSub1.setRelatedSub2(ivSub22);
+		env.context().commitChanges();
+
+		ObjectContext cleanContext = runtime.newContext();
+
+		IvSub1 ivSub1Fetched = SelectById.queryId(IvSub1.class, 1).selectOne(cleanContext);
+		IvSub2 ivSub21Fetched = SelectById.queryId(IvSub2.class, 2).selectOne(cleanContext);
+		IvSub2 ivSub22Fetched = SelectById.queryId(IvSub2.class, 3).selectOne(cleanContext);
+
+		assertEquals(ivSub1Fetched.getRelatedSub2(), ivSub22Fetched);
+
+		assertEquals(3, ivRootTable.getRowCount());
+		assertEquals(1, ivSub1Table.getRowCount());
+		assertEquals(2, ivSub2Table.getRowCount());
+
+		assertEquals("One", ivSub1Fetched.getSub1Name());
+		assertEquals("Two", ivSub21Fetched.getSub2Name());
+		assertEquals("Three", ivSub22Fetched.getSub2Name());
+	}
+
+	@Test
+	public void updateOneToOneChildToChildValueToNull() throws SQLException {
+		TableHelper ivRootTable = env.table("IV_ROOT", "ID", "DISCRIMINATOR");
+		TableHelper ivSub1Table = env.table("IV_SUB1", "ID", "SUB1_NAME", "SUB2_ID");
+		TableHelper ivSub2Table = env.table("IV_SUB2", "ID", "SUB2_NAME");
+
+		ivRootTable.insert(1, "IvSub1");
+		ivRootTable.insert(2, "IvSub2");
+
+		ivSub2Table.insert(2, "Two");
+
+		ivSub1Table.insert(1, "One", 2);
+
+		IvSub1 ivSub1 = SelectById.queryId(IvSub1.class, 1).selectOne(env.context());
+
+		ivSub1.setRelatedSub2(null);
+		env.context().commitChanges();
+
+		ObjectContext cleanContext = runtime.newContext();
+
+		IvSub1 ivSub1Fetched = SelectById.queryId(IvSub1.class, 1).selectOne(cleanContext);
+		IvSub2 ivSub2Fetched = SelectById.queryId(IvSub2.class, 2).selectOne(cleanContext);
+
+		assertNull(ivSub1Fetched.getRelatedSub2());
+
+		assertEquals(2, ivRootTable.getRowCount());
+		assertEquals(1, ivSub1Table.getRowCount());
+		assertEquals(1, ivSub2Table.getRowCount());
+
+		assertEquals("One", ivSub1Fetched.getSub1Name());
+		assertEquals("Two", ivSub2Fetched.getSub2Name());
+	}
+
 }
