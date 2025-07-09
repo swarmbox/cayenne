@@ -42,6 +42,7 @@ import org.apache.cayenne.map.EntityInheritanceTree;
 import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
 import org.apache.cayenne.map.ObjRelationship;
+import org.apache.cayenne.util.RelationshipPredicates;
 
 /**
  * A convenience superclass for {@link ClassDescriptorFactory} implementors.
@@ -406,7 +407,14 @@ public abstract class PersistentDescriptorFactory implements ClassDescriptorFact
         for(int i=0; i<count-1; i++) {
             DbRelationship rel = dbRelationships.get(i);
             path = path.dot(rel.getName());
-            descriptor.addAdditionalDbEntity(path, rel.getTargetEntity(), false);
+            // This avoids the error of performing a delete when there should be no operation on flattened
+            // relationships. The full shared-PK test is required alongside the direction test: isToMasterPK()
+            // alone also holds for a join table whose composite PK is only partly joined, and that row is an
+            // independent row rather than the target's other half, so it does still have to be deleted.
+            DbRelationship nextRel = dbRelationships.get(i + 1);
+            boolean isNextRelToMasterPK = RelationshipPredicates.isToMasterPK(nextRel)
+                    && RelationshipPredicates.isSharedPrimaryKey(nextRel);
+            descriptor.addAdditionalDbEntity(path, rel.getTargetEntity(), isNextRelToMasterPK);
         }
     }
 
