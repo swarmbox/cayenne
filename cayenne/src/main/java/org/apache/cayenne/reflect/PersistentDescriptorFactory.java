@@ -340,7 +340,9 @@ public abstract class PersistentDescriptorFactory implements ClassDescriptorFact
                 for(int i=0; i<count-1; i++) {
                     DbRelationship rel = dbRelationships.get(i);
                     path = path.dot(rel.getName());
-                    descriptor.addAdditionalDbEntity(path, rel.getTargetEntity(), false);
+                    // This avoids the error of performing a delete when there should be no operation on flattened relationships.
+                    boolean isNextRelToMasterPK = dbRelationships.get(i+1).isToMasterPK();
+                    descriptor.addAdditionalDbEntity(path, rel.getTargetEntity(), isNextRelToMasterPK);
                 }
                 return true;
             }

@@ -19,9 +19,12 @@
 
 package org.apache.cayenne.access.flush;
 
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.cayenne.ObjectId;
+import org.apache.cayenne.PersistenceState;
+import org.apache.cayenne.Persistent;
 import org.apache.cayenne.access.flush.operation.DbRowOp;
 import org.apache.cayenne.access.flush.operation.DbRowOpType;
 import org.apache.cayenne.access.flush.operation.DbRowOpVisitor;
@@ -111,17 +114,20 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
         ObjectId srcId = id;
         ObjectId targetId = null;
 
-        Iterator<CayenneMapEntry> dbPathIterator = entity.resolvePathComponents(dbPath);
-        while(dbPathIterator.hasNext()) {
-            CayenneMapEntry entry = dbPathIterator.next();
+        List<CayenneMapEntry> entries = new ArrayList<>();
+        entity.resolvePathComponents(dbPath).forEachRemaining(entries::add);
+
+        for(int i = 0; i < entries.size(); i++) {
+            CayenneMapEntry entry = entries.get(i);
             flattenedPath = flattenedPath.dot(entry.getName());
             if(entry instanceof DbRelationship) {
+                boolean isFinalEntry = i == entries.size() - 1;
                 DbRelationship relationship = (DbRelationship)entry;
                 // intermediate db entity to be inserted
                 DbEntity target = relationship.getTargetEntity();
                 // if ID is present, just use it, otherwise create new
                 // if this is the last segment, and it's a relationship, use known target id from arc creation
-                if(!dbPathIterator.hasNext()) {
+                if(isFinalEntry) {
                     targetId = finalTargetId;
                 } else {
                     if(!relationship.isToMany()) {
@@ -140,17 +146,56 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
 
                     DbRowOpType type;
                     if(relationship.isToMany()) {
-                        type = add ? DbRowOpType.INSERT : DbRowOpType.DELETE;
+                        if(add) {
+                            type = DbRowOpType.INSERT;
+                        } else if(hasSharedPrimaryKeyNext(entries, i)) {
+                            // Vertical-inheritance case (CAY-2890): the next segment is a shared-PK
+                            // link, so the intermediate and its next target are the same logical row
+                            // split across two tables. Removing the arc is an UPDATE to the
+                            // intermediate's FK rather than a DELETE of the row. M:N junctions (whose
+                            // next segment joins only part of a composite PK) still take DELETE.
+                            type = DbRowOpType.UPDATE;
+                        } else {
+                            type = DbRowOpType.DELETE;
+                        }
                         factory.getOrCreate(target, targetId, type);
                     } else {
-                        type = add ? DbRowOpType.INSERT : DbRowOpType.UPDATE;
+                        if (
+                            add &&
+                            hasSharedPrimaryKeyNext(entries, i) &&
+                            targetRowExists(finalTargetId)
+                        ) {
+                            // Vertical-inheritance case (CAY-2890): when the next segment is a
+                            // shared-PK link back to the parent, the intermediate row and the parent
+                            // row are the same logical entity split across two tables. If the target
+                            // object is already persisted (not NEW), its child row exists too, so
+                            // the arc change is an UPDATE to that child's FK rather than an INSERT
+                            // of a new child row.
+                            type = DbRowOpType.UPDATE;
+                        } else if (add) {
+                            type = DbRowOpType.INSERT;
+                        } else {
+                            type = DbRowOpType.UPDATE;
+                        }
                         factory.<DbRowOpWithValues>getOrCreate(target, targetId, type)
                                 .getValues()
                                 .addFlattenedId(flattenedPath, targetId);
                     }
-                } else if(dbPathIterator.hasNext()) {
+                } else if(!isFinalEntry) {
+                    DbRowOpType type;
+                    if(add) {
+                        type = DbRowOpType.UPDATE;
+                    } else if(defaultType == DbRowOpType.DELETE && hasSharedPrimaryKeyNext(entries, i)) {
+                        // Vertical-inheritance case (CAY-2890): an existing intermediate row whose
+                        // next segment is a shared-PK link should be UPDATEd, not deleted -- the
+                        // row represents a real entity. Junction tables (non-shared-PK next
+                        // segment) fall through to the default DELETE.
+                        type = DbRowOpType.UPDATE;
+                    } else {
+                        type = defaultType;
+                    }
                     // should update existing DB row
-                    factory.getOrCreate(target, targetId, add ? DbRowOpType.UPDATE : defaultType);
+                    factory.getOrCreate(target, targetId, type);
                 }
                 processRelationship(relationship, srcId, targetId, shouldProcessAsAddition(relationship, add));
                 srcId = targetId; // use target as next source
@@ -158,6 +203,73 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
         }
 
         return flattenedResultId(targetId);
+    }
+
+    /**
+     * Returns whether the row for {@code targetId} is already present in the
+     * database. Answered by consulting the {@link org.apache.cayenne.access.ObjectStore}:
+     * any registered object that is not in the {@code NEW} state has been (or
+     * was) persisted. The {@code ObjectStore} is authoritative for this
+     * question -- unlike the data row cache, it is not evictable.
+     */
+    private boolean targetRowExists(ObjectId targetId) {
+        Persistent target = (Persistent) factory.getStore().getNode(targetId);
+        return target != null && target.getPersistenceState() != PersistenceState.NEW;
+    }
+
+    /**
+     * Returns whether the next path segment is a shared-PK link traversed from
+     * the dependent side toward the master -- i.e. vertical-inheritance
+     * child-to-parent. Such a link represents a single logical row spread
+     * across two tables, so the intermediate row at step {@code i} is an update
+     * target rather than a row to insert or delete.
+     * <p>
+     * Two conditions must both hold:
+     * <ul>
+     *     <li>{@link DbRelationship#isSharedPrimaryKey()} -- all joined columns
+     *     are the full PK of both sides, which excludes M:N junction tables
+     *     where only part of the composite PK participates;</li>
+     *     <li>{@link DbRelationship#isToMasterPK()} -- direction is toward
+     *     the master, not the dependent. The dependent direction
+     *     ({@code toDependentPK}) still requires an insert/update of the child
+     *     row itself.</li>
+     * </ul>
+     */
+    private static boolean hasSharedPrimaryKeyNext(List<CayenneMapEntry> entries, int i) {
+        if (i + 1 >= entries.size()) {
+            return false;
+        }
+        CayenneMapEntry nextEntry = entries.get(i + 1);
+        if (!(nextEntry instanceof DbRelationship)) {
+            return false;
+        }
+        DbRelationship next = (DbRelationship) nextEntry;
+        return isSharedPrimaryKey(next) && next.isToMasterPK();
+    }
+
+    /**
+     * Returns whether the relationship is a full primary key identity join,
+     * meaning it joins on all primary key columns of both entities. This
+     * intentionally excludes partial PK joins such as join tables with
+     * composite primary keys (e.g. many-to-many association tables where each
+     * FK column is part of the composite PK).
+     */
+    private static boolean isSharedPrimaryKey(DbRelationship relationship) {
+        List<DbJoin> joins = relationship.getJoins();
+        if (joins.isEmpty()) {
+            return false;
+        }
+        for (DbJoin join : joins) {
+            DbAttribute source = join.getSource();
+            DbAttribute target = join.getTarget();
+            if (source == null || target == null
+                    || !source.isPrimaryKey() || !target.isPrimaryKey()) {
+                return false;
+            }
+        }
+        int joinCount = joins.size();
+        return joinCount == relationship.getSourceEntity().getPrimaryKeys().size()
+                && joinCount == relationship.getTargetEntity().getPrimaryKeys().size();
     }
 
     private boolean shouldSkipFlattenedOp(ObjectId id, ObjectId finalTargetId) {
