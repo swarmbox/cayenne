@@ -374,6 +374,10 @@ public class ObjRelationship extends Relationship<ObjEntity, ObjAttribute, ObjRe
         return isToMany() || isFlattened() || isToDependentEntity() || !isToPK();
     }
 
+    public boolean isFkOnChildEntity() {
+        return getSourceEntity().getSuperEntityName() != null && getDbRelationships().size() == 2 && getDbRelationships().get(0).isToDependentPK() && getDbRelationships().get(1).isToPK();
+    }
+
     /**
      * Returns true if underlying DbRelationships point to dependent entity.
      */
