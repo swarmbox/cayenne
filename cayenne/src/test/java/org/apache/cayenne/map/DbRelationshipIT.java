@@ -31,9 +31,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 @UseCayenneRuntime(CayenneProjects.TESTMAP_PROJECT)
 public class DbRelationshipIT extends RuntimeCase {
@@ -119,4 +121,37 @@ public class DbRelationshipIT extends RuntimeCase {
         assertSame(rback, rforward.getReverseRelationship());
         assertSame(rforward, rback.getReverseRelationship());
     }
+
+    @Test
+    public void testIsSharedPrimaryKey() {
+        // PAINTING.toPaintingInfo joins PAINTING_ID to PAINTING_ID, both single-column PKs
+        DbRelationship r = paintingEnt.getRelationship("toPaintingInfo");
+        assertTrue(r.isSharedPrimaryKey());
+    }
+
+    @Test
+    public void testIsSharedPrimaryKeyForForeignKey() {
+        // PAINTING.toArtist joins ARTIST_ID (not PAINTING's PK) to ARTIST_ID
+        DbRelationship r = paintingEnt.getRelationship("toArtist");
+        assertFalse(r.isSharedPrimaryKey());
+    }
+
+    @Test
+    public void testIsSharedPrimaryKeyForCompositeJoinTable() {
+        // ARTIST.artistExhibitArray joins ARTIST.ARTIST_ID (PK) to ARTIST_EXHIBIT.ARTIST_ID,
+        // but ARTIST_EXHIBIT's PK is composite (ARTIST_ID, EXHIBIT_ID) so only one of its
+        // PK columns participates in the join -- not a full identity join
+        DbRelationship r = artistEnt.getRelationship("artistExhibitArray");
+        assertFalse(r.isSharedPrimaryKey());
+    }
+
+    @Test
+    public void testIsSharedPrimaryKeyReverseDirection() {
+        // The dependent->master side of a shared-PK pair (the "toPainting" reverse of
+        // toPaintingInfo) should also report true: joins are still PK->PK on both sides.
+        DbEntity paintingInfoEnt = runtime.getDataDomain().getEntityResolver().getDbEntity("PAINTING_INFO");
+        DbRelationship r = paintingInfoEnt.getRelationship("painting");
+        assertTrue(r.isSharedPrimaryKey());
+    }
 }
+

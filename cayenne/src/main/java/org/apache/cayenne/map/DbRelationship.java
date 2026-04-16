@@ -297,6 +297,25 @@ public class DbRelationship extends Relationship<DbEntity, DbAttribute, DbRelati
     }
 
     /**
+     * Returns whether this relationship is a full primary key identity join,
+     * meaning it joins on all primary key columns of both entities.
+     * <p>
+     * This intentionally excludes partial PK joins such as join tables
+     * with composite primary keys (e.g. many-to-many association tables
+     * where each FK column is part of the composite PK).
+     *
+     * @since 5.0
+     */
+    public boolean isSharedPrimaryKey() {
+        if (!isValidForDepPk()) {
+            return false;
+        }
+        int joinCount = getJoins().size();
+        return joinCount == getSourceEntity().getPrimaryKeys().size()
+                && joinCount == getTargetEntity().getPrimaryKeys().size();
+    }
+
+    /**
      * @since 1.1
      */
     public boolean isValidForDepPk() {

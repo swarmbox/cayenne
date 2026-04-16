@@ -19,8 +19,11 @@
 
 package org.apache.cayenne.access.translator.select;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -48,8 +51,16 @@ class TableTree {
      * - tables from prefetches
      */
     private final Map<CayennePath, TableTreeNode> tableNodes;
+
+    /**
+     * Aliases that have been referenced by content-producing stages (SELECT
+     * columns, WHERE qualifiers, ORDER BY, etc.) via {@link #aliasForPath}.
+     */
+    private final Set<String> usedAliases;
+
     private final TableTree parentTree;
     private final TableTreeNode rootNode;
+    private final JoinRedirectProcessor redirectProcessor;
 
     private TableTreeNode activeNode;
     private int tableAliasSequence;
@@ -58,7 +69,9 @@ class TableTree {
         this.tableAliasSequence = 0;
         this.parentTree = parentTree;
         this.tableNodes = new LinkedHashMap<>();
+        this.usedAliases = new HashSet<>();
         this.rootNode = new TableTreeNode(root, nextTableAlias());
+        this.redirectProcessor = new JoinRedirectProcessor(tableNodes::get, rootNode);
     }
 
     void addJoinTable(CayennePath path, DbRelationship relationship, JoinType joinType) {
@@ -66,8 +79,16 @@ class TableTree {
     }
 
     void addJoinTable(CayennePath path, DbRelationship relationship, JoinType joinType, Expression additionalQualifier) {
-        TableTreeNode treeNode = tableNodes.get(path);
-        if (treeNode != null) {
+        if (tableNodes.containsKey(path)) {
+            return;
+        }
+        if (redirectProcessor.redirectFor(path) != null) {
+            return;
+        }
+
+        AliasRedirect newRedirect = redirectProcessor.detect(path, relationship, joinType, additionalQualifier);
+        if (newRedirect != null) {
+            usedAliases.add(newRedirect.alias);
             return;
         }
 
@@ -83,11 +104,37 @@ class TableTree {
         if(CURRENT_ALIAS_PATH.equals(attributePath)) {
             return CURRENT_ALIAS;
         }
-        TableTreeNode node = tableNodes.get(attributePath);
-        if (node == null) {
+        String alias = resolveAlias(attributePath);
+        if (alias == null) {
             throw new CayenneRuntimeException("No table for attribute '%s' found", attributePath);
         }
-        return node.getTableAlias();
+        usedAliases.add(alias);
+        return alias;
+    }
+
+    private String resolveAlias(CayennePath path) {
+        if (path.isEmpty()) {
+            return rootNode.getTableAlias();
+        }
+        AliasRedirect redirect = redirectProcessor.redirectFor(path);
+        if (redirect != null) {
+            return redirect.alias;
+        }
+        TableTreeNode node = tableNodes.get(path);
+        if (node != null) {
+            return node.getTableAlias();
+        }
+        return null;
+    }
+
+    boolean isAliasUsed(String alias) {
+        return usedAliases.contains(alias);
+    }
+
+    void prune(Collection<CayennePath> paths) {
+        for (CayennePath path : paths) {
+            tableNodes.remove(path);
+        }
     }
 
     String nextTableAlias() {

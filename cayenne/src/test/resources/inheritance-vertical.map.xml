@@ -73,6 +73,7 @@
 		<db-attribute name="ID" type="INTEGER" isPrimaryKey="true" isMandatory="true"/>
 		<db-attribute name="IMPL_ID" type="INTEGER"/>
 		<db-attribute name="NAME" type="VARCHAR" length="100"/>
+		<db-attribute name="SUB1_SUB1_ID" type="INTEGER"/>
 	</db-entity>
 	<db-entity name="IV_ROOT">
 		<db-attribute name="DISCRIMINATOR" type="VARCHAR" length="10"/>
@@ -298,6 +299,9 @@
 	<db-relationship name="implsWithLock" source="IV_OTHER" target="IV_IMPL_WITH_LOCK" toMany="true">
 		<db-attribute-pair source="ID" target="OTHER_ID"/>
 	</db-relationship>
+	<db-relationship name="sub1Sub1" source="IV_OTHER" target="IV_SUB1_SUB1">
+		<db-attribute-pair source="SUB1_SUB1_ID" target="ID"/>
+	</db-relationship>
 	<db-relationship name="ivSub3s" source="IV_ROOT" target="IV_SUB3" toMany="true">
 		<db-attribute-pair source="ID" target="IV_ROOT_ID"/>
 	</db-relationship>
@@ -361,6 +365,7 @@
 	<obj-relationship name="impls" source="IvOther" target="IvImpl" deleteRule="Deny" db-relationship-path="impls.base"/>
 	<obj-relationship name="implsWithInverse" source="IvOther" target="IvImpl" deleteRule="Deny" db-relationship-path="implsWithInverse.base"/>
 	<obj-relationship name="implsWithLock" source="IvOther" target="IvImplWithLock" deleteRule="Deny" db-relationship-path="impls.base"/>
+	<obj-relationship name="sub1Sub1" source="IvOther" target="IvSub1Sub1" deleteRule="Nullify" db-relationship-path="sub1Sub1.master.master"/>
 	<obj-relationship name="relatedSub2" source="IvSub1" target="IvSub2" deleteRule="Nullify" db-relationship-path="sub1.relatedSub2.master"/>
 	<obj-relationship name="relatedSub1" source="IvSub2" target="IvSub1" deleteRule="Nullify" db-relationship-path="sub2.relatedSub1.master"/>
 	<obj-relationship name="ivRoot" source="IvSub3" target="IvRoot" deleteRule="Nullify" db-relationship-path="sub3.ivRoot1"/>
