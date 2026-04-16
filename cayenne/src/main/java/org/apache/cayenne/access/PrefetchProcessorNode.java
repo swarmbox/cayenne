@@ -93,6 +93,22 @@ class PrefetchProcessorNode extends PrefetchTreeNode {
                 }
                 peers.add(object);
             }
+
+            linkReverseToOne(object, parent);
+        }
+    }
+
+    /**
+     * Resolves the child's to-one back-reference to its prefetched parent.
+     */
+    private void linkReverseToOne(Persistent child, Persistent parent) {
+        ArcProperty reverse = incoming.getComplimentaryReverseArc();
+        if (!(reverse instanceof ToOneProperty) || !relationshipNotModified(child, reverse)) {
+            return;
+        }
+        Object current = reverse.readPropertyDirectly(child);
+        if (current == null || current instanceof Fault) {
+            reverse.writePropertyDirectly(child, null, parent);
         }
     }
 
