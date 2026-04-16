@@ -26,4 +26,10 @@ final class NoopParentAttachmentStrategy implements ParentAttachmentStrategy {
     public void linkToParent(DataRow row, Persistent object) {
         // do nothing...
     }
+
+    // nothing is linked, so there is no association to check
+    @Override
+    public boolean isAssociationInParentRow() {
+        return false;
+    }
 }

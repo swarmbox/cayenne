@@ -27,4 +27,11 @@ interface ParentAttachmentStrategy {
      * Links a child object resolved from the row to its parent object(s).
      */
     void linkToParent(DataRow row, Persistent object);
+
+    /**
+     * Returns whether the association between a child and its parent is read from the parent's row, i.e. the FK is in
+     * the parent row, rather than from the row the child is resolved from. It decides whose snapshot the association
+     * is checked against when the child's reverse to-one is written.
+     */
+    boolean isAssociationInParentRow();
 }

@@ -110,16 +110,20 @@ class PrefetchProcessorNode extends PrefetchTreeNode {
      */
     void linkToParent(Persistent object, Persistent parent, long version) {
         if (parent != null && parent.getPersistenceState() != PersistenceState.HOLLOW) {
+            // whether the parent's to-one was written; a to-many is connected later, in connectToParents()
+            boolean parentLinked = false;
+
             // if a relationship is to-one (i.e. flattened to-one), can connect right away....
             // write directly to prevent changing persistence state.
             if (incoming instanceof ToOneProperty) {
-                store().withObjectLock(parent.getObjectId(), () -> {
-                    if (parent.getPersistenceState() != PersistenceState.HOLLOW
+                parentLinked = store().withObjectLock(parent.getObjectId(), () -> {
+                    boolean linked = parent.getPersistenceState() != PersistenceState.HOLLOW
                             && !refreshedByNewerStatement(parent, version)
-                            && relationshipNotModified(parent, incoming)) {
+                            && relationshipNotModified(parent, incoming);
+                    if (linked) {
                         incoming.writePropertyDirectly(parent, null, object);
                     }
-                    return null;
+                    return linked;
                 });
             } else {
                 Partition partition = partitionByParent.computeIfAbsent(parent, p -> new Partition());
@@ -132,7 +136,44 @@ class PrefetchProcessorNode extends PrefetchTreeNode {
                 partition.objects.add(object);
                 partition.version = Math.min(partition.version, version);
             }
+
+            linkReverseToOne(object, parent, version, parentLinked);
         }
+    }
+
+    /**
+     * Resolves the child's to-one back-reference to its prefetched parent. Like the to-one write in
+     * {@link #linkToParent(Persistent, Persistent, long)}, it is done under the child's object lock and only when the
+     * association is not older than the snapshot of the row it was read from, so that a concurrent query that has
+     * already refreshed that row from a newer statement keeps its to-one. Which row that is depends on where the FK is:
+     * <ul>
+     * <li>In the parent row, the association is the parent's to-one read from the other side, and the child's snapshot,
+     * taken by a later statement, says nothing about it. The to-one write to the parent has already checked it against
+     * the parent's snapshot under the parent's lock, so the reverse is written exactly when that write was made.</li>
+     * <li>Otherwise the association is read from the row the child is resolved from, so it is checked against the
+     * child's snapshot.</li>
+     * </ul>
+     */
+    private void linkReverseToOne(Persistent child, Persistent parent, long version, boolean parentLinked) {
+        ArcProperty reverse = incoming.getComplementaryReverseArc();
+        if (!(reverse instanceof ToOneProperty)) {
+            return;
+        }
+
+        boolean associationInParentRow = parentAttachmentStrategy.isAssociationInParentRow();
+        store().withObjectLock(child.getObjectId(), () -> {
+            boolean associationCurrent = associationInParentRow
+                    ? parentLinked
+                    : version >= child.getSnapshotVersion();
+
+            if (associationCurrent && relationshipNotModified(child, reverse)) {
+                Object current = reverse.readPropertyDirectly(child);
+                if (current == null || current instanceof Fault) {
+                    reverse.writePropertyDirectly(child, null, parent);
+                }
+            }
+            return null;
+        });
     }
 
     // every node of a tree belongs to the one context being resolved

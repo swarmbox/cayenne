@@ -79,4 +79,9 @@ class JoinedIdParentAttachmentStrategy implements ParentAttachmentStrategy {
         // the join columns are in the child row, so the association is as old as the child row
         node.linkToParent(object, parentObject, row.getVersion());
     }
+
+    @Override
+    public boolean isAssociationInParentRow() {
+        return false;
+    }
 }

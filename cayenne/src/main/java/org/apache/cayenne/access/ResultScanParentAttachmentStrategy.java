@@ -105,6 +105,11 @@ class ResultScanParentAttachmentStrategy implements ParentAttachmentStrategy {
         }
     }
 
+    @Override
+    public boolean isAssociationInParentRow() {
+        return true;
+    }
+
     private void indexParents() {
         partitionByChild = new HashMap<>();
 

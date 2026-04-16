@@ -35,4 +35,10 @@ class StackLookupParentAttachmentStrategy implements ParentAttachmentStrategy {
         // the child and the parent are parts of the same flat row
         node.linkToParent(object, parent.getLastResolved(), row.getVersion());
     }
+
+    // the association is read from the joint row, which the child is resolved from as well
+    @Override
+    public boolean isAssociationInParentRow() {
+        return false;
+    }
 }
