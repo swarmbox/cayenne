@@ -31,6 +31,7 @@
 	<map name="relationships-flattened"/>
 	<map name="relationships-many-to-many-join"/>
 	<map name="relationships-set-to-many"/>
+	<map name="relationships-shared-pk-fk"/>
 	<map name="relationships-to-many-fk"/>
 	<map name="relationships-to-one-fk"/>
 	<map name="return-types"/>

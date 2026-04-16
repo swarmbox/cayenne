@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dataMap xmlns="http://cayenne.apache.org/schema/14/dataMap"
+	 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	 xsi:schemaLocation="http://cayenne.apache.org/schema/14/dataMap https://cayenne.apache.org/schema/14/dataMap.xsd"
+	 defaultPackage="org.apache.cayenne.testdo.relationships_shared_pk_fk">
+	<dbEntity name="KEY_PAIR">
+		<dbAttribute name="FIRST_KEY" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
+		<dbAttribute name="SECOND_KEY" type="INTEGER" primaryKey="true" mandatory="true"/>
+	</dbEntity>
+	<dbEntity name="MEMBER">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
+		<dbAttribute name="PAIR_FIRST_KEY" type="INTEGER"/>
+		<dbAttribute name="PAIR_SECOND_KEY" type="INTEGER"/>
+	</dbEntity>
+	<dbEntity name="MEMBER_NOTE">
+		<dbAttribute name="MEMBER_ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="TEXT" type="VARCHAR" length="100"/>
+	</dbEntity>
+	<dbEntity name="MEMBER_PROFILE">
+		<dbAttribute name="BIO" type="VARCHAR" length="100"/>
+		<dbAttribute name="MEMBER_ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="MENTOR_ID" type="INTEGER"/>
+	</dbEntity>
+	<objEntity name="KeyPair" className="org.apache.cayenne.testdo.relationships_shared_pk_fk.KeyPair" dbEntityName="KEY_PAIR">
+		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+	</objEntity>
+	<objEntity name="Member" className="org.apache.cayenne.testdo.relationships_shared_pk_fk.Member" dbEntityName="MEMBER">
+		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+	</objEntity>
+	<objEntity name="MemberProfile" className="org.apache.cayenne.testdo.relationships_shared_pk_fk.MemberProfile" dbEntityName="MEMBER_PROFILE">
+		<objAttribute name="bio" type="java.lang.String" dbAttributePath="BIO"/>
+	</objEntity>
+	<dbRelationship name="swapped" source="KEY_PAIR" target="KEY_PAIR" toDependentPK="true">
+		<dbAttributePair source="FIRST_KEY" target="SECOND_KEY"/>
+		<dbAttributePair source="SECOND_KEY" target="FIRST_KEY"/>
+	</dbRelationship>
+	<dbRelationship name="keyPair" source="MEMBER" target="KEY_PAIR">
+		<dbAttributePair source="PAIR_FIRST_KEY" target="FIRST_KEY"/>
+		<dbAttributePair source="PAIR_SECOND_KEY" target="SECOND_KEY"/>
+	</dbRelationship>
+	<dbRelationship name="menteeProfiles" source="MEMBER" target="MEMBER_PROFILE" toMany="true">
+		<dbAttributePair source="ID" target="MENTOR_ID"/>
+	</dbRelationship>
+	<dbRelationship name="note" source="MEMBER" target="MEMBER_NOTE" toDependentPK="true">
+		<dbAttributePair source="ID" target="MEMBER_ID"/>
+	</dbRelationship>
+	<dbRelationship name="notes" source="MEMBER" target="MEMBER_NOTE" toDependentPK="true" toMany="true">
+		<dbAttributePair source="ID" target="MEMBER_ID"/>
+	</dbRelationship>
+	<dbRelationship name="profile" source="MEMBER" target="MEMBER_PROFILE" toDependentPK="true">
+		<dbAttributePair source="ID" target="MEMBER_ID"/>
+	</dbRelationship>
+	<dbRelationship name="member" source="MEMBER_NOTE" target="MEMBER">
+		<dbAttributePair source="MEMBER_ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="member" source="MEMBER_PROFILE" target="MEMBER">
+		<dbAttributePair source="MEMBER_ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="mentor" source="MEMBER_PROFILE" target="MEMBER">
+		<dbAttributePair source="MENTOR_ID" target="ID"/>
+	</dbRelationship>
+	<objRelationship name="swapped" source="KeyPair" target="KeyPair" deleteRule="Nullify" dbRelationshipPath="swapped"/>
+	<objRelationship name="keyPair" source="Member" target="KeyPair" deleteRule="Nullify" dbRelationshipPath="keyPair"/>
+	<objRelationship name="menteeProfiles" source="Member" target="MemberProfile" deleteRule="Deny" dbRelationshipPath="menteeProfiles"/>
+	<objRelationship name="profile" source="Member" target="MemberProfile" deleteRule="Cascade" dbRelationshipPath="profile"/>
+	<objRelationship name="mentor" source="MemberProfile" target="Member" deleteRule="Nullify" dbRelationshipPath="mentor"/>
+</dataMap>

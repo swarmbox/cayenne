@@ -22,6 +22,7 @@ package org.apache.cayenne.map;
 import org.apache.cayenne.CayenneRuntime;
 import org.apache.cayenne.unit.CayenneProjects;
 import org.apache.cayenne.unit.CayenneTestsEnv;
+import org.apache.cayenne.util.RelationshipPredicates;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -122,4 +123,60 @@ public class DbRelationshipIT {
         assertSame(rback, rforward.getReverseRelationship());
         assertSame(rforward, rback.getReverseRelationship());
     }
+
+    @Test
+    public void isSharedPrimaryKeyForPkToPkJoin() {
+        // PAINTING.toPaintingInfo joins PAINTING_ID to PAINTING_ID, both single-column PKs
+        DbRelationship r = paintingEnt.getRelationship("toPaintingInfo");
+        assertTrue(RelationshipPredicates.isSharedPrimaryKey(r));
+    }
+
+    @Test
+    public void isSharedPrimaryKeyForForeignKey() {
+        // PAINTING.toArtist joins ARTIST_ID (not PAINTING's PK) to ARTIST_ID
+        DbRelationship r = paintingEnt.getRelationship("toArtist");
+        assertFalse(RelationshipPredicates.isSharedPrimaryKey(r));
+    }
+
+    @Test
+    public void isSharedPrimaryKeyForCompositeJoinTable() {
+        // ARTIST.artistExhibitArray joins ARTIST.ARTIST_ID (PK) to ARTIST_EXHIBIT.ARTIST_ID,
+        // but ARTIST_EXHIBIT's PK is composite (ARTIST_ID, EXHIBIT_ID) so only one of its
+        // PK columns participates in the join -- not a full identity join
+        DbRelationship r = artistEnt.getRelationship("artistExhibitArray");
+        assertFalse(RelationshipPredicates.isSharedPrimaryKey(r));
+    }
+
+    @Test
+    public void isSharedPrimaryKeyReverseDirection() {
+        // The dependent->master side of a shared-PK pair (the "toPainting" reverse of
+        // toPaintingInfo) should also report true: joins are still PK->PK on both sides.
+        DbEntity paintingInfoEnt = runtime.getDataDomain().getEntityResolver().getDbEntity("PAINTING_INFO");
+        DbRelationship r = paintingInfoEnt.getRelationship("painting");
+        assertTrue(RelationshipPredicates.isSharedPrimaryKey(r));
+    }
+
+    @Test
+    public void isSharedPrimaryKeyWithUnresolvedJoin() {
+        DataMap namespace = new DataMap();
+        DbEntity e = new DbEntity("test");
+        namespace.addDbEntity(e);
+
+        DbAttribute pk = new DbAttribute("ID");
+        pk.setPrimaryKey(true);
+        e.addAttribute(pk);
+
+        DbRelationship r = new DbRelationship("toSelf");
+        e.addRelationship(r);
+        r.setSourceEntity(e);
+        r.setTargetEntityName(e);
+
+        // names a column that does not exist on the entity, so both join endpoints resolve to null. The
+        // column counts still line up, so nothing but an explicit null check distinguishes this from a real
+        // identity join -- and treating an unresolved join as one would skip a flattened row's DELETE.
+        r.addJoin(new DbJoin(r, "MISSING", "MISSING"));
+
+        assertFalse(RelationshipPredicates.isSharedPrimaryKey(r));
+    }
 }
+

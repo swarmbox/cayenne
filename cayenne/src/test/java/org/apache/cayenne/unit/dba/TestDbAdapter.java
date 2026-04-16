@@ -216,7 +216,8 @@ public abstract class TestDbAdapter {
     }
 
     public boolean supportsFKConstraints(DbEntity entity) {
-        return !"FK_OF_DIFFERENT_TYPE".equals(entity.getName());
+        // MEMBER_NOTE holds dependent rows whose master row is missing
+        return !"FK_OF_DIFFERENT_TYPE".equals(entity.getName()) && !"MEMBER_NOTE".equals(entity.getName());
     }
 
     public boolean supportsFKConstraints() {

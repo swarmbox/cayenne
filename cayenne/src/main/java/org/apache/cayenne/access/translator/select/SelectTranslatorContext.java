@@ -67,6 +67,7 @@ class SelectTranslatorContext implements SQLGenerationContext {
             new LimitOffsetStage(),
             new ColumnDescriptorStage(),
             new TableTreeQualifierStage(),
+            new TableTreePruningStage(),
             new TableTreeStage(),
             new SQLResultStage(),
             new SQLGenerationStage()
@@ -143,7 +144,8 @@ class SelectTranslatorContext implements SQLGenerationContext {
         this.resolver = resolver;
         this.metadata = query.getMetaData(resolver);
         this.parentContext = parentContext;
-        this.tableTree = new TableTree(metadata.getDbEntity(), parentContext == null ? null : parentContext.getTableTree());
+        this.tableTree = new TableTree(metadata.getDbEntity(),
+                parentContext == null ? null : parentContext.getTableTree(), resolver);
         this.columns = new ArrayList<>();
         this.bindings = new ArrayList<>();
         this.selectBuilder = SQLBuilder.select();

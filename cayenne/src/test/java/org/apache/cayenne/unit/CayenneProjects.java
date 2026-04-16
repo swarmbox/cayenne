@@ -66,6 +66,7 @@ public class CayenneProjects {
     public static final String RELATIONSHIPS_DELETE_RULES_PROJECT = "cayenne-relationships-delete-rules.xml";
     public static final String RELATIONSHIPS_FLATTENED_PROJECT = "cayenne-relationships-flattened.xml";
     public static final String RELATIONSHIPS_SET_TO_MANY_PROJECT = "cayenne-relationships-set-to-many.xml";
+    public static final String RELATIONSHIPS_SHARED_PK_FK_PROJECT = "cayenne-relationships-shared-pk-fk.xml";
     public static final String RELATIONSHIPS_TO_MANY_FK_PROJECT = "cayenne-relationships-to-many-fk.xml";
     public static final String RELATIONSHIPS_TO_ONE_FK_PROJECT = "cayenne-relationships-to-one-fk.xml";
     public static final String RETURN_TYPES_PROJECT = "cayenne-return-types.xml";

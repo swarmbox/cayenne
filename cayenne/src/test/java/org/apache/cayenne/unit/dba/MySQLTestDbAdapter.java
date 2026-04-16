@@ -33,7 +33,8 @@ public class MySQLTestDbAdapter extends TestDbAdapter {
     static final Collection<String> NO_CONSTRAINTS_TABLES = Arrays.asList(
             "REFLEXIVE_AND_TO_ONE",
             "ARTGROUP",
-            "FK_OF_DIFFERENT_TYPE");
+            "FK_OF_DIFFERENT_TYPE",
+            "MEMBER_NOTE");
 
     public MySQLTestDbAdapter(DbAdapter adapter) {
         super(adapter);

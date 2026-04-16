@@ -37,6 +37,7 @@ import org.apache.cayenne.reflect.LifecycleCallbackRegistry;
 import org.apache.cayenne.reflect.SingletonFaultFactory;
 import org.apache.cayenne.reflect.generic.PersistentObjectDescriptorFactory;
 import org.apache.cayenne.reflect.generic.ValueComparisonStrategyFactory;
+import org.apache.cayenne.util.RelationshipPredicates;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +48,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -93,6 +95,7 @@ public class EntityResolver implements MappingNamespace {
      */
     protected AdhocObjectFactory objectFactory;
 
+    private final Map<DbRelationship, Boolean> verticalInheritanceLinks = new ConcurrentHashMap<>();
 
     /**
      * Creates new empty EntityResolver.
@@ -354,6 +357,7 @@ public class EntityResolver implements MappingNamespace {
      * @since 4.0
      */
     public void refreshMappingCache() {
+        verticalInheritanceLinks.clear();
         mappingCache = new ProxiedMappingNamespace() {
 
             @Override
@@ -361,6 +365,19 @@ public class EntityResolver implements MappingNamespace {
                 return new MappingCache(maps);
             }
         };
+    }
+
+    /**
+     * Returns whether the relationship leads from a vertical inheritance sub-table row to its super-table row, as
+     * {@link RelationshipPredicates#isVerticalInheritanceLink(DbRelationship)} decides it. That decision scans the
+     * attributes of the mapped ObjEntities, so the answer is kept per relationship until
+     * {@link #refreshMappingCache()}.
+     *
+     * @since 5.0
+     */
+    public boolean isVerticalInheritanceLink(DbRelationship relationship) {
+        return verticalInheritanceLinks.computeIfAbsent(relationship,
+                RelationshipPredicates::isVerticalInheritanceLink);
     }
 
     /**
