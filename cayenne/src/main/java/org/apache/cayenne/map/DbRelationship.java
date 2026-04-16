@@ -300,6 +300,38 @@ public class DbRelationship extends Relationship<DbEntity, DbAttribute, DbRelati
     }
 
     /**
+     * Returns whether this relationship is a full primary key identity join,
+     * meaning it joins on all primary key columns of both entities.
+     * <p>
+     * This intentionally excludes partial PK joins such as join tables
+     * with composite primary keys (e.g. many-to-many association tables
+     * where each FK column is part of the composite PK).
+     * <p>
+     * A join whose endpoints do not resolve is not an identity join either. This is deliberately stricter than
+     * {@link #isValidForDepPk()}, which tolerates a null endpoint, because callers act on the answer by
+     * skipping writes: treating an unresolved join as an identity join would drop a flattened row's DELETE or
+     * turn its INSERT into an UPDATE matching nothing.
+     *
+     * @since 5.0
+     */
+    public boolean isSharedPrimaryKey() {
+        List<DbJoin> joins = getJoins();
+        if (joins.isEmpty()) {
+            return false;
+        }
+        for (DbJoin join : joins) {
+            DbAttribute source = join.getSource();
+            DbAttribute target = join.getTarget();
+            if (source == null || target == null || !source.isPrimaryKey() || !target.isPrimaryKey()) {
+                return false;
+            }
+        }
+        int joinCount = joins.size();
+        return joinCount == getSourceEntity().getPrimaryKeys().size()
+                && joinCount == getTargetEntity().getPrimaryKeys().size();
+    }
+
+    /**
      * @since 1.1
      */
     public boolean isValidForDepPk() {

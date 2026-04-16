@@ -155,14 +155,12 @@ class CustomColumnSetExtractor implements ColumnExtractor {
             // that are only needed for this column must be outer, unlike those that already exist in the tree
             // (coming from the qualifier), that are left unchanged.
             TableTree tableTree = context.getTableTree();
-            int nodeCount = tableTree.getNodeCount();
-
-            PathTranslationResult result = context.getPathTranslator()
-                    .translatePath(context.getMetadata().getDbEntity(), prefix);
-            result.getDbRelationship().ifPresent(relationship
-                    -> tableTree.addJoinTable(result.getFinalPath(), relationship, JoinType.LEFT_OUTER));
-
-            tableTree.useOuterJoinsSince(nodeCount);
+            tableTree.addOuterJoins(() -> {
+                PathTranslationResult result = context.getPathTranslator()
+                        .translatePath(context.getMetadata().getDbEntity(), prefix);
+                result.getDbRelationship().ifPresent(relationship
+                        -> tableTree.addJoinTable(result.getFinalPath(), relationship, JoinType.LEFT_OUTER));
+            });
         }
     }
 }

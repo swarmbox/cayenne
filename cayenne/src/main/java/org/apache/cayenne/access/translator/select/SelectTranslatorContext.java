@@ -67,6 +67,7 @@ class SelectTranslatorContext implements SQLGenerationContext {
             new LimitOffsetStage(),
             new ColumnDescriptorStage(),
             new TableTreeQualifierStage(),
+            new TableTreePruningStage(),
             new TableTreeStage(),
             new SQLResultStage(),
             new SQLGenerationStage()

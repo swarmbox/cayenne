@@ -30,9 +30,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class DbRelationshipIT {
 
@@ -120,4 +122,60 @@ public class DbRelationshipIT {
         assertSame(rback, rforward.getReverseRelationship());
         assertSame(rforward, rback.getReverseRelationship());
     }
+
+    @Test
+    public void isSharedPrimaryKeyForPkToPkJoin() {
+        // PAINTING.toPaintingInfo joins PAINTING_ID to PAINTING_ID, both single-column PKs
+        DbRelationship r = paintingEnt.getRelationship("toPaintingInfo");
+        assertTrue(r.isSharedPrimaryKey());
+    }
+
+    @Test
+    public void isSharedPrimaryKeyForForeignKey() {
+        // PAINTING.toArtist joins ARTIST_ID (not PAINTING's PK) to ARTIST_ID
+        DbRelationship r = paintingEnt.getRelationship("toArtist");
+        assertFalse(r.isSharedPrimaryKey());
+    }
+
+    @Test
+    public void isSharedPrimaryKeyForCompositeJoinTable() {
+        // ARTIST.artistExhibitArray joins ARTIST.ARTIST_ID (PK) to ARTIST_EXHIBIT.ARTIST_ID,
+        // but ARTIST_EXHIBIT's PK is composite (ARTIST_ID, EXHIBIT_ID) so only one of its
+        // PK columns participates in the join -- not a full identity join
+        DbRelationship r = artistEnt.getRelationship("artistExhibitArray");
+        assertFalse(r.isSharedPrimaryKey());
+    }
+
+    @Test
+    public void isSharedPrimaryKeyReverseDirection() {
+        // The dependent->master side of a shared-PK pair (the "toPainting" reverse of
+        // toPaintingInfo) should also report true: joins are still PK->PK on both sides.
+        DbEntity paintingInfoEnt = runtime.getDataDomain().getEntityResolver().getDbEntity("PAINTING_INFO");
+        DbRelationship r = paintingInfoEnt.getRelationship("painting");
+        assertTrue(r.isSharedPrimaryKey());
+    }
+
+    @Test
+    public void isSharedPrimaryKeyWithUnresolvedJoin() {
+        DataMap namespace = new DataMap();
+        DbEntity e = new DbEntity("test");
+        namespace.addDbEntity(e);
+
+        DbAttribute pk = new DbAttribute("ID");
+        pk.setPrimaryKey(true);
+        e.addAttribute(pk);
+
+        DbRelationship r = new DbRelationship("toSelf");
+        e.addRelationship(r);
+        r.setSourceEntity(e);
+        r.setTargetEntityName(e);
+
+        // names a column that does not exist on the entity, so both join endpoints resolve to null. The
+        // column counts still line up, so nothing but an explicit null check distinguishes this from a real
+        // identity join -- and treating an unresolved join as one would skip a flattened row's DELETE.
+        r.addJoin(new DbJoin(r, "MISSING", "MISSING"));
+
+        assertFalse(r.isSharedPrimaryKey());
+    }
 }
+
