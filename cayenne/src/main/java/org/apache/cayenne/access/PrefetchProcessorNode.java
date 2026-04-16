@@ -132,7 +132,31 @@ class PrefetchProcessorNode extends PrefetchTreeNode {
                 partition.objects.add(object);
                 partition.version = Math.min(partition.version, version);
             }
+
+            linkReverseToOne(object, parent, version);
         }
+    }
+
+    /**
+     * Resolves the child's to-one back-reference to its prefetched parent. Like the to-one write in
+     * {@link #linkToParent(Persistent, Persistent, long)}, it is done under the child's object lock and only when the
+     * row it was read from is not older than the child's snapshot, so that a concurrent query that has already
+     * refreshed the child from a newer statement keeps its to-one.
+     */
+    private void linkReverseToOne(Persistent child, Persistent parent, long version) {
+        ArcProperty reverse = incoming.getComplementaryReverseArc();
+        if (!(reverse instanceof ToOneProperty)) {
+            return;
+        }
+        store().withObjectLock(child.getObjectId(), () -> {
+            if (version >= child.getSnapshotVersion() && relationshipNotModified(child, reverse)) {
+                Object current = reverse.readPropertyDirectly(child);
+                if (current == null || current instanceof Fault) {
+                    reverse.writePropertyDirectly(child, null, parent);
+                }
+            }
+            return null;
+        });
     }
 
     // every node of a tree belongs to the one context being resolved
