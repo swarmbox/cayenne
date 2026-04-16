@@ -19,6 +19,7 @@
 
 package org.apache.cayenne.access.translator.select;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -51,10 +52,19 @@ class TableTree {
      * - tables from prefetches
      */
     private final Map<CayennePath, TableTreeNode> tableNodes;
+
+    /**
+     * Aliases that have been referenced by content-producing stages (SELECT
+     * columns, WHERE qualifiers, ORDER BY, etc.) via {@link #aliasForPath}.
+     */
+    private final Set<String> contentAliases;
+
     private final TableTree parentTree;
     private final TableTreeNode rootNode;
+    private final JoinRedirectProcessor redirectProcessor;
 
     private TableTreeNode activeNode;
+    private boolean outerJoinsOnly;
 
     // alias bookkeeping, maintained only in the root tree (parentTree == null); nested trees
     // delegate generation upwards so that aliases stay unique across the whole statement
@@ -66,7 +76,9 @@ class TableTree {
         this.usedAliases = new HashSet<>();
         this.nextAliasSuffix = new HashMap<>();
         this.tableNodes = new LinkedHashMap<>();
+        this.contentAliases = new HashSet<>();
         this.rootNode = new TableTreeNode(root, nextTableAlias(root));
+        this.redirectProcessor = new JoinRedirectProcessor(tableNodes::get, rootNode);
     }
 
     void addJoinTable(CayennePath path, DbRelationship relationship, JoinType joinType) {
@@ -74,8 +86,19 @@ class TableTree {
     }
 
     void addJoinTable(CayennePath path, DbRelationship relationship, JoinType joinType, Expression additionalQualifier) {
-        TableTreeNode treeNode = tableNodes.get(path);
-        if (treeNode != null) {
+        if (tableNodes.containsKey(path)) {
+            return;
+        }
+        if (redirectProcessor.redirectFor(path) != null) {
+            return;
+        }
+        if (outerJoinsOnly) {
+            joinType = JoinType.LEFT_OUTER;
+        }
+
+        AliasRedirect newRedirect = redirectProcessor.detect(path, relationship, joinType, additionalQualifier);
+        if (newRedirect != null) {
+            contentAliases.add(newRedirect.alias);
             return;
         }
 
@@ -92,11 +115,37 @@ class TableTree {
         if(CURRENT_ALIAS_PATH.equals(attributePath)) {
             return CURRENT_ALIAS;
         }
-        TableTreeNode node = tableNodes.get(attributePath);
-        if (node == null) {
+        String alias = resolveAlias(attributePath);
+        if (alias == null) {
             throw new CayenneRuntimeException("No table for attribute '%s' found", attributePath);
         }
-        return node.getTableAlias();
+        contentAliases.add(alias);
+        return alias;
+    }
+
+    private String resolveAlias(CayennePath path) {
+        if (path.isEmpty()) {
+            return rootNode.getTableAlias();
+        }
+        AliasRedirect redirect = redirectProcessor.redirectFor(path);
+        if (redirect != null) {
+            return redirect.alias;
+        }
+        TableTreeNode node = tableNodes.get(path);
+        if (node != null) {
+            return node.getTableAlias();
+        }
+        return null;
+    }
+
+    boolean isContentAlias(String alias) {
+        return contentAliases.contains(alias);
+    }
+
+    void prune(Collection<CayennePath> paths) {
+        for (CayennePath path : paths) {
+            tableNodes.remove(path);
+        }
     }
 
     String nextTableAlias(DbEntity entity) {
@@ -134,12 +183,18 @@ class TableTree {
     }
 
     /**
-     * Turns the joins added to the tree after it reached a given node count into outer joins.
+     * Makes the joins that the action adds to the tree outer joins, leaving the joins already in the tree
+     * unchanged. A join's type has to be final when the join is added, as it decides whether the join can be
+     * redirected to an existing alias.
      */
-    void useOuterJoinsSince(int nodeCount) {
-        tableNodes.entrySet().stream()
-                .skip(nodeCount - 1)
-                .forEach(e -> e.setValue(e.getValue().outer()));
+    void addOuterJoins(Runnable action) {
+        boolean previous = outerJoinsOnly;
+        outerJoinsOnly = true;
+        try {
+            action.run();
+        } finally {
+            outerJoinsOnly = previous;
+        }
     }
 
     /**

@@ -59,15 +59,6 @@ class TableTreeNode {
         this.additionalQualifier = additionalQualifier;
     }
 
-    /**
-     * Returns a node that is the same as this one, but is joined with an outer join.
-     */
-    TableTreeNode outer() {
-        return joinType == JoinType.LEFT_OUTER
-                ? this
-                : new TableTreeNode(attributePath, relationship, tableAlias, JoinType.LEFT_OUTER, additionalQualifier);
-    }
-
     public CayennePath getAttributePath() {
         return attributePath;
     }
