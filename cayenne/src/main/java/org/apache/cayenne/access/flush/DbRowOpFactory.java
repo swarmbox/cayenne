@@ -28,11 +28,13 @@ import org.apache.cayenne.access.flush.operation.DbRowOpType;
 import org.apache.cayenne.access.flush.operation.DeleteDbRowOpFactory;
 import org.apache.cayenne.access.flush.operation.InsertDbRowOp;
 import org.apache.cayenne.access.flush.operation.UpdateDbRowOp;
+import org.apache.cayenne.exp.path.CayennePath;
 import org.apache.cayenne.map.DbEntity;
 import org.apache.cayenne.map.EntityResolver;
 import org.apache.cayenne.reflect.ClassDescriptor;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -43,12 +45,13 @@ import java.util.Set;
  *
  * @since 4.2
  */
-class DbRowOpFactory {
+class DbRowOpFactory implements DbRowOpCreator {
 
     private final EntityResolver resolver;
     private final DataContextObjectStore store;
     private final Set<ArcTarget> processedArcs;
     private final Map<ObjectId, DbRowOp> dbRows;
+    private final Map<ObjectId, Map<CayennePath, ObjectId>> flattenedPaths;
     private final RootRowOpProcessor rootRowOpProcessor;
     private final DeleteDbRowOpFactory deleteDbRowOpFactory;
 
@@ -64,6 +67,7 @@ class DbRowOpFactory {
         this.resolver = resolver;
         this.store = store;
         this.dbRows = new HashMap<>(4);
+        this.flattenedPaths = new HashMap<>(4);
         this.processedArcs = processedArcs;
         this.rootRowOpProcessor = new RootRowOpProcessor(this);
         this.deleteDbRowOpFactory = deleteDbRowOpFactory;
@@ -77,7 +81,8 @@ class DbRowOpFactory {
         this.dbRows.clear();
     }
 
-    Collection<? extends DbRowOp> createRows(ObjectDiff diff) {
+    @Override
+    public Collection<? extends DbRowOp> createRows(ObjectDiff diff) {
         updateDiff(diff);
         DbEntity rootEntity = descriptor.getEntity().getDbEntity();
         DbRowOp row = getOrCreate(rootEntity, object.getObjectId(), DbRowOpType.forObject(object));
@@ -126,6 +131,69 @@ class DbRowOpFactory {
 
     DataContextObjectStore getStore() {
         return store;
+    }
+
+    /**
+     * Returns the id of the row at the given flattened path, preferring one discovered by the flush in
+     * progress over one the {@link ObjectStore} already tracks.
+     */
+    ObjectId getFlattenedId(ObjectId id, CayennePath path) {
+        ObjectId flushLocal = flattenedPaths.getOrDefault(id, Collections.emptyMap()).get(path);
+        return flushLocal != null ? flushLocal : store.getFlattenedId(id, path);
+    }
+
+    /**
+     * Records the id of a flattened row that this flush intends to create. The id is kept local to the flush
+     * so that later segments and attributes of the same flush see a consistent value, and is handed to the
+     * {@link ObjectStore} only once the queries have executed - see {@link #promoteFlattenedPaths()}. Marking
+     * the store directly here would leave behind an id for a row that a failed flush never inserted, and the
+     * next flush would then take it for an existing row and issue an update matching nothing.
+     * <p>
+     * {@code GraphBasedDbRowOpSorter} is a deliberate exception: it reads {@code ObjectStore} directly while
+     * sorting, i.e. before promotion, so it sees only durable markings. It is a public DI service and cannot be
+     * handed the factory; the rows it consults snapshots for are covered by read-time markings from
+     * {@code ObjectResolver.resolveAdditionalIds}.
+     */
+    void markFlattenedPath(ObjectId id, CayennePath path, ObjectId flattenedId) {
+        flattenedPaths.computeIfAbsent(id, i -> new HashMap<>(4)).put(path, flattenedId);
+    }
+
+    Collection<ObjectId> getFlattenedIds(ObjectId id) {
+        return getFlattenedPathIdMap(id).values();
+    }
+
+    Map<CayennePath, ObjectId> getFlattenedPathIdMap(ObjectId id) {
+        Map<CayennePath, ObjectId> tracked = store.getFlattenedPathIdMap(id);
+        Map<CayennePath, ObjectId> flushLocal = flattenedPaths.getOrDefault(id, Collections.emptyMap());
+
+        if (flushLocal.isEmpty()) {
+            return tracked;
+        }
+        if (tracked.isEmpty()) {
+            // not the live staging map: callers iterate this while creating further ops
+            return Collections.unmodifiableMap(new HashMap<>(flushLocal));
+        }
+
+        Map<CayennePath, ObjectId> merged = new HashMap<>(tracked);
+        merged.putAll(flushLocal);
+        return merged;
+    }
+
+    /**
+     * Hands every flattened path discovered by this flush to the {@link ObjectStore}. Called once the flush has
+     * executed its queries, so that a flush failing before that point leaves nothing behind.
+     * <p>
+     * The staged id is promoted as is, since its {@code getIdSnapshot()} already resolves to the row's real key.
+     * <p>
+     * Note this is keyed on the queries having run, not on the transaction having committed: a failure raised
+     * at COMMIT - a {@code DEFERRABLE INITIALLY DEFERRED} constraint, say - still promotes. That window is not
+     * specific to flattened paths, since {@code postprocess} likewise flips objects to COMMITTED before the
+     * transaction ends.
+     */
+    void promoteFlattenedPaths() {
+        flattenedPaths.forEach((id, paths) -> paths.forEach((path, flattenedId)
+                -> store.markFlattenedPath(id, path, flattenedId)));
+        flattenedPaths.clear();
     }
 
     ObjectDiff getDiff() {

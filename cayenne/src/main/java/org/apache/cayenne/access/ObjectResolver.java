@@ -188,8 +188,28 @@ class ObjectResolver {
             ObjectId objectId = createObjectId(row, "db:" + dbEntity.getName(), dbEntity.getPrimaryKeys(), path, false);
             if(objectId != null) {
 				context.getObjectStore().markFlattenedPath(object.getObjectId(), path, objectId);
+            } else if(rowCarriesKeyOf(row, dbEntity, path)) {
+                // The row was queried and holds no such child row, so an id tracked for this path names a row
+                // that is gone. The tracked id is what makes the flush choose UPDATE over INSERT, so leaving it
+                // would silently skip re-inserting the child row and the update would match nothing. Clearing
+                // it here is what lets the cache be repaired by re-reading the database.
+                context.getObjectStore().forgetFlattenedPath(object.getObjectId(), path);
             }
         }
+    }
+
+    /**
+     * Returns whether the result row carries the primary key columns of a flattened path's entity, so that their
+     * being null can be read as that row's absence. A query that never selected them - a column query, or a
+     * prefetch that did not join the table - yields null for an unrelated reason and says nothing either way.
+     */
+    private static boolean rowCarriesKeyOf(DataRow row, DbEntity dbEntity, CayennePath path) {
+        for(DbAttribute pk : dbEntity.getPrimaryKeys()) {
+            if(!row.containsKey(path.dot(pk.getName()).value())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     ObjEntity getEntity() {

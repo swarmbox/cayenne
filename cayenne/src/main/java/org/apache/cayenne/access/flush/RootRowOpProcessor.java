@@ -85,7 +85,7 @@ class RootRowOpProcessor implements DbRowOpVisitor<Void> {
         diff.apply(deleteHandler);
 
         ClassDescriptor descriptor = dbRowOpFactory.getDescriptor();
-        Map<CayennePath,ObjectId> flattenedPathIdMap = dbRowOpFactory.getStore().getFlattenedPathIdMap(dbRow.getChangeId());
+        Map<CayennePath,ObjectId> flattenedPathIdMap = dbRowOpFactory.getFlattenedPathIdMap(dbRow.getChangeId());
         flattenedPathIdMap.forEach((path, id) -> {
             AdditionalDbEntityDescriptor addEntity = descriptor.getAdditionalDbEntities().get(path);
             if (!addEntity.noDelete()) {// See PersistentDescriptorFactory.indexAdditionalDbEntities

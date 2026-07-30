@@ -157,7 +157,7 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
                             entries.subList(i + 1, entries.size()));
                     targetId = derivedTargetId;
                     if(targetId == null && !relationship.isToMany()) {
-                        targetId = factory.getStore().getFlattenedId(id, flattenedPath);
+                        targetId = factory.getFlattenedId(id, flattenedPath);
                     }
                 }
 
@@ -165,7 +165,7 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
                     // should insert, regardless of original operation (insert/update)
                     targetId = ObjectId.of(DbPathExp.DB_PREFIX + target.getName());
                     if(!relationship.isToMany()) {
-                        factory.getStore().markFlattenedPath(id, flattenedPath, targetId);
+                        factory.markFlattenedPath(id, flattenedPath, targetId);
                     }
 
                     DbRowOpType type;
@@ -269,12 +269,12 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
      * Records the row this flush is about to insert against the object that owns it, so a later flush in the same
      * context does not insert it again: the owner was created here rather than fetched, so
      * {@code ObjectResolver.resolveAdditionalIds} never recorded the route and a later flattened write to it would
-     * fail on a duplicate key. Marking goes through the ObjectStore.
+     * fail on a duplicate key. Marking goes through the factory.
      */
     private void markDerivedRowOnOwner(ObjectId ownerId, List<CayenneMapEntry> entries, int i, ObjectId derivedId) {
         CayennePath ownerPath = ownerRelativePath(entries, i);
         if(ownerPath != null) {
-            factory.getStore().markFlattenedPath(ownerId, ownerPath, derivedId);
+            factory.markFlattenedPath(ownerId, ownerPath, derivedId);
         }
     }
 
@@ -482,8 +482,8 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
         // as we get two sides of the relationship processed,
         // check if we got more information for a reverse operation
         return finalTargetId != null
-                && factory.getStore().getFlattenedIds(id).isEmpty()
-                && !factory.getStore().getFlattenedIds(finalTargetId).isEmpty();
+                && factory.getFlattenedIds(id).isEmpty()
+                && !factory.getFlattenedIds(finalTargetId).isEmpty();
     }
 
     private boolean shouldProcessAsAddition(DbRelationship relationship, boolean add) {

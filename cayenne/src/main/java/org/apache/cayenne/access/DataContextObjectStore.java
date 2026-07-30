@@ -807,6 +807,28 @@ public class DataContextObjectStore implements ObjectStore {
     }
 
     /**
+     * Discards the tracked flattened row for a single path of a single object, for use when a fetch has shown
+     * that the row it named is no longer there. Counterpart to
+     * {@link #markFlattenedPath(ObjectId, CayennePath, ObjectId)}, which only ever adds; without this the
+     * tracking could not be corrected by re-reading the database, and an id left over from an earlier fetch or
+     * from a flush whose transaction did not survive would keep turning the child row's insert into an update
+     * matching nothing.
+     *
+     * @since 5.0
+     */
+    void forgetFlattenedPath(ObjectId objectId, CayennePath path) {
+        if(trackedFlattenedPaths == null) {
+            return;
+        }
+        // drop the per-object map once its last path goes, so that repeatedly refetching objects whose child
+        // rows have been removed does not leave an empty map per object behind for the life of the context
+        trackedFlattenedPaths.computeIfPresent(objectId, (id, paths) -> {
+            paths.remove(path);
+            return paths.isEmpty() ? null : paths;
+        });
+    }
+
+    /**
      * @param key object id that was removed from the {@link #objectMap}
      * @since 4.2.2
      */
