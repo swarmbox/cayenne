@@ -83,7 +83,11 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
 
         DataContextObjectStore objectStore = context.getObjectStore();
 
-        List<DbRowOp> dbRowOps = createDbRowOps(objectStore, objectStoreGraphDiff);
+        Set<ArcTarget> processedArcs = new HashSet<>();
+        DbRowOpFactory factory = new DbRowOpFactory(dataDomain.getEntityResolver(), objectStore, processedArcs,
+                deleteDbRowOpFactory);
+
+        List<DbRowOp> dbRowOps = createDbRowOps(factory, objectStoreGraphDiff);
         updateObjectIds(dbRowOps);
         List<DbRowOp> deduplicatedOps = mergeSameObjectIds(dbRowOps);
         List<DbRowOp> filteredOps = filterOps(deduplicatedOps);
@@ -91,6 +95,7 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
         List<? extends Query> queries = createQueries(sortedOps);
         executeQueries(queries);
         createReplacementIds(objectStore, afterCommitDiff, sortedOps);
+        factory.promoteFlattenedPaths();
         // note: we are using here not filtered operations, but the original ones,
         // as we need them all for the postprocessing
         postprocess(context, objectStoreGraphDiff, afterCommitDiff, deduplicatedOps);
@@ -100,21 +105,17 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
 
     /**
      * Create ops based on incoming graph changes
-     * @param objectStore originating object store
+     * @param creator creator of this flush's operations
      * @param changes object graph diff
      * @return collection of {@link DbRowOp}
      */
-    protected List<DbRowOp> createDbRowOps(DataContextObjectStore objectStore, ObjectStoreGraphDiff changes) {
-        EntityResolver resolver = dataDomain.getEntityResolver();
-
+    protected List<DbRowOp> createDbRowOps(DbRowOpCreator creator, ObjectStoreGraphDiff changes) {
         Map<ObjectId, ObjectDiff> changesByObjectId = changes.getChangesByObjectId();
         List<DbRowOp> ops = new ArrayList<>(changesByObjectId.size());
-        Set<ArcTarget> processedArcs = new HashSet<>();
 
-        DbRowOpFactory factory = new DbRowOpFactory(resolver, objectStore, processedArcs, deleteDbRowOpFactory);
         // ops.addAll() method is slower in this case as it will allocate new array for all values
         //noinspection UseBulkOperation
-        changesByObjectId.forEach((obj, diff) -> factory.createRows(diff).forEach(ops::add));
+        changesByObjectId.forEach((obj, diff) -> creator.createRows(diff).forEach(ops::add));
 
         return ops;
     }

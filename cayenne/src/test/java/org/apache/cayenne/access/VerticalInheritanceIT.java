@@ -19,6 +19,7 @@
 package org.apache.cayenne.access;
 
 import org.apache.cayenne.Cayenne;
+import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.ObjectContext;
 import org.apache.cayenne.Persistent;
 import org.apache.cayenne.access.flush.operation.DbRowOpSorter;
@@ -708,6 +709,51 @@ public class VerticalInheritanceIT {
 
 		assertEquals(0, ivAbstractTable.getRowCount());
 		assertEquals(0, ivConcreteTable.getRowCount());
+	}
+
+	/**
+	 * A commit retried after a failed flush must still insert the child row. The flattened path is
+	 * recorded while the operations are being built, before any SQL runs, so a flush that fails must leave
+	 * no {@link ObjectStore#markFlattenedPath} entry behind: a tracked id for a row that was never
+	 * inserted downgrades the child row's INSERT to an UPDATE matching nothing, and the parent row is then
+	 * written with the child row silently missing and no exception raised.
+	 */
+	@Test
+	public void insertFlattenedAfterFailedCommitRetriedOnSameContext() throws SQLException {
+		ObjectContext context = env.context();
+
+		ivAbstractTable.insert(1, null, "S");
+		ivConcreteTable.insert(1, "parent", null);
+		IvConcrete parent = SelectById.query(IvConcrete.class, 1).selectOne(context);
+		assertNotNull(parent);
+
+		// Drop the referenced row behind Cayenne's back, so inserting an object pointing at it violates
+		// IV_ABSTRACT.PARENT_ID -> IV_ABSTRACT.ID. The failure then happens while executing SQL, after the
+		// flattened path has been marked - the same window an in-statement database trigger error falls in.
+		// (A DEFERRABLE INITIALLY DEFERRED constraint fires later still, at COMMIT, and is not covered.)
+		ivConcreteTable.deleteAll();
+		ivAbstractTable.deleteAll();
+
+		IvConcrete child = context.newObject(IvConcrete.class);
+		child.setName("child");
+		child.setParent(parent);
+		assertThrows(CayenneRuntimeException.class, context::commitChanges);
+
+		assertEquals(0, ivAbstractTable.getRowCount(), "nothing persisted by the failed flush");
+		assertEquals(0, ivConcreteTable.getRowCount(), "nothing persisted by the failed flush");
+
+		// remove the cause and save again, exactly as an interactive "fix it and retry" would
+		child.setParent(null);
+		context.commitChanges();
+
+		assertEquals(1, ivAbstractTable.getRowCount(), "parent-table row for the retried insert");
+		assertEquals(1, ivConcreteTable.getRowCount(), "child-table row for the retried insert");
+
+		ObjectContext cleanContext = runtime.newContext();
+		IvConcrete refetched = SelectById.query(IvConcrete.class, Cayenne.longPKForObject(child))
+				.selectOne(cleanContext);
+		assertNotNull(refetched);
+		assertEquals("child", refetched.getName(), "flattened attribute of the retried insert");
 	}
 
 	@Test
