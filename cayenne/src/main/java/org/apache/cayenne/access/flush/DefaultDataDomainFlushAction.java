@@ -65,6 +65,13 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
     protected final OperationObserver observer;
     protected final DeleteDbRowOpFactory deleteDbRowOpFactory;
 
+    /**
+     * The factory that created this flush's operations, kept so that the flattened rows it staged can be handed to
+     * the ObjectStore once the queries have run. Null when an overriding {@link #createDbRowOps} doesn't call this
+     * class's version. A flush action serves a single flush.
+     */
+    private DbRowOpFactory dbRowOpFactory;
+
     protected DefaultDataDomainFlushAction(DataDomain dataDomain, DbRowOpSorter dbRowOpSorter,
                                            DeleteDbRowOpFactory deleteDbRowOpFactory) {
         this.dataDomain = dataDomain;
@@ -114,11 +121,22 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
         Set<ArcTarget> processedArcs = new HashSet<>();
 
         DbRowOpFactory factory = new DbRowOpFactory(resolver, objectStore, processedArcs, deleteDbRowOpFactory);
+        dbRowOpFactory = factory;
         // ops.addAll() method is slower in this case as it will allocate new array for all values
         //noinspection UseBulkOperation
         changesByObjectId.forEach((obj, diff) -> factory.createRows(diff).forEach(ops::add));
 
         return ops;
+    }
+
+    /**
+     * Hands the flattened rows staged while creating this flush's operations to the ObjectStore, now that the
+     * queries have run. See {@link DbRowOpFactory#markFlattenedPath}.
+     */
+    private void promoteFlattenedPaths() {
+        if (dbRowOpFactory != null) {
+            dbRowOpFactory.promoteFlattenedPaths();
+        }
     }
 
     /**
@@ -202,7 +220,9 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
     }
 
     /**
-     * Set final {@link ObjectId} for persistent objects
+     * Set final {@link ObjectId} for persistent objects, then hand the flattened rows this flush wrote to the
+     * ObjectStore, which tracks them from now on. An override must call this method, or the store doesn't learn of
+     * those rows, and a later flush inserts them again.
      *
      * @param store object store
      * @param afterCommitDiff result graph diff
@@ -211,6 +231,7 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
     protected void createReplacementIds(DataContextObjectStore store, CompoundDiff afterCommitDiff, List<DbRowOp> dbRowOps) {
         ReplacementIdVisitor visitor = new ReplacementIdVisitor(store, dataDomain.getEntityResolver(), afterCommitDiff);
         dbRowOps.forEach(row -> row.accept(visitor));
+        promoteFlattenedPaths();
     }
 
     /**
