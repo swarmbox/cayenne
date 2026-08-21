@@ -61,7 +61,6 @@ class ReplacementIdVisitor implements DbRowOpVisitor<Void> {
                 for (Map.Entry<String, Object> next : id.getReplacementIdMap().entrySet()) {
                     next.setValue(DeferredValue.resolve(next.getValue()));
                 }
-                store.markFlattenedPath(dbRow.getChangeId(), path, id.createReplacementId());
             } else {
                 throw new CayenneRuntimeException("PK for flattened path '%s' of object %s is not set during insert."
                         , path, dbRow.getObject());
