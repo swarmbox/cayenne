@@ -207,7 +207,7 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
      * @param dbRowOps collection of {@link DbRowOp}
      */
     protected void createReplacementIds(DataContextObjectStore store, CompoundDiff afterCommitDiff, List<DbRowOp> dbRowOps) {
-        ReplacementIdVisitor visitor = new ReplacementIdVisitor(store, dataDomain.getEntityResolver(), afterCommitDiff);
+        ReplacementIdVisitor visitor = new ReplacementIdVisitor(dataDomain.getEntityResolver(), afterCommitDiff);
         dbRowOps.forEach(row -> row.accept(visitor));
     }
 

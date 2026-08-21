@@ -24,7 +24,6 @@ import java.util.Map;
 import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.ObjectId;
 import org.apache.cayenne.Persistent;
-import org.apache.cayenne.access.DataContextObjectStore;
 import org.apache.cayenne.access.DeferredValue;
 import org.apache.cayenne.access.flush.operation.DbRowOp;
 import org.apache.cayenne.access.flush.operation.DbRowOpVisitor;
@@ -41,12 +40,10 @@ import org.apache.cayenne.reflect.AttributeProperty;
  */
 class ReplacementIdVisitor implements DbRowOpVisitor<Void> {
 
-    private final DataContextObjectStore store;
     private final EntityResolver resolver;
     private final CompoundDiff result;
 
-    ReplacementIdVisitor(DataContextObjectStore store, EntityResolver resolver, CompoundDiff result) {
-        this.store = store;
+    ReplacementIdVisitor(EntityResolver resolver, CompoundDiff result) {
         this.resolver = resolver;
         this.result = result;
     }
@@ -60,7 +57,6 @@ class ReplacementIdVisitor implements DbRowOpVisitor<Void> {
                 for (Map.Entry<String, Object> next : id.getReplacementIdMap().entrySet()) {
                     next.setValue(DeferredValue.resolve(next.getValue()));
                 }
-                store.markFlattenedPath(dbRow.getChangeId(), path, id.createReplacementId());
             } else {
                 throw new CayenneRuntimeException("PK for flattened path '%s' of object %s is not set during insert."
                         , path, dbRow.getObject());
