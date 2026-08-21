@@ -219,22 +219,7 @@ public class ObjectDiff extends NodeDiff {
 
                 ObjRelationship relationship = property.getRelationship();
                 if (relationship.isFlattened()) {
-
-                    if (flatIds == null) {
-                        flatIds = new HashMap<>();
-                    }
-
-                    ArcOperation oldOp = flatIds.put(arcDiff, arcDiff);
-
-                    // "delete" cancels "create" and vice versa...
-                    if (oldOp != null && oldOp.isDelete() != arcDiff.isDelete()) {
-                        addDiff = false;
-                        flatIds.remove(arcDiff);
-
-                        if (otherDiffs != null) {
-                            otherDiffs.remove(oldOp);
-                        }
-                    }
+                    addDiff = !cancelsPendingFlattenedArc(arcDiff);
                 } else if (property.getComplimentaryReverseArc() == null) {
 
                     // register complementary arc diff
@@ -251,6 +236,10 @@ public class ObjectDiff extends NodeDiff {
                 }
 
                 currentArcSnapshot.put(arcId.getForwardArc(), targetId);
+
+                if (property.getRelationship().isFlattened()) {
+                    addDiff = !cancelsPendingFlattenedArc(arcDiff);
+                }
             } else {
                 String message = (property == null) ? "No property for arcId " + arcId
                         : "Unrecognized property for arcId " + arcId + ": " + property;
@@ -265,6 +254,31 @@ public class ObjectDiff extends NodeDiff {
 
             otherDiffs.add(diff);
         }
+    }
+
+    /**
+     * Records a flattened arc operation, reporting whether it cancels one already recorded -- a delete cancels a
+     * create of the same arc to the same target, and the reverse. Both are dropped, so the flush sees the arc's
+     * net effect rather than a replay of the events that produced it, which is how this diff already reports
+     * simple properties.
+     */
+    private boolean cancelsPendingFlattenedArc(ArcOperation arcDiff) {
+        if (flatIds == null) {
+            flatIds = new HashMap<>();
+        }
+
+        ArcOperation oldOp = flatIds.put(arcDiff, arcDiff);
+        if (oldOp == null || oldOp.isDelete() == arcDiff.isDelete()) {
+            return false;
+        }
+
+        flatIds.remove(arcDiff);
+
+        if (otherDiffs != null) {
+            otherDiffs.remove(oldOp);
+        }
+
+        return true;
     }
 
     private void addPhantomFkDiff(ArcOperation arcDiff) {
