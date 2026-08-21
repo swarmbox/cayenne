@@ -19,6 +19,8 @@
 
 package org.apache.cayenne.access.flush.operation;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -37,6 +39,7 @@ public class DefaultDbRowOpSorter implements DbRowOpSorter {
 
     protected final Provider<DataDomain> dataDomainProvider;
     protected volatile Comparator<DbRowOp> comparator;
+    private volatile DbRowOpSorter dependencySorter;
 
     public DefaultDbRowOpSorter(@Inject Provider<DataDomain> dataDomainProvider) {
         this.dataDomainProvider = dataDomainProvider;
@@ -48,8 +51,77 @@ public class DefaultDbRowOpSorter implements DbRowOpSorter {
         dbRows.sort(getComparator());
         // sort reflexively dependent objects
         sortReflexive(dbRows);
+        // resolve ties the entity comparator can't, i.e. operations within one strongly connected component
+        sortWithinComponents(dbRows);
 
         return dbRows;
+    }
+
+    /**
+     * Re-sorts every maximal run of operations the comparator can't separate -- same operation type, same strongly
+     * connected component of the entity graph -- when that run spans more than one entity. Such a run is ordered by
+     * row-level dependencies, which is the only thing that can tell apart two entities that reference each other.
+     * On any failure, including a dependency cycle, the run keeps the order it already had.
+     *
+     * @since 5.0
+     */
+    protected void sortWithinComponents(List<DbRowOp> sortedDbRows) {
+        // a single-entity flush has no cross-entity tie to break; returning here also keeps this step from
+        // consulting the entity comparator at all, which is the common case
+        if(!spansMultipleEntities(sortedDbRows)) {
+            return;
+        }
+
+        Comparator<DbRowOp> rowComparator = getComparator();
+        int start = 0;
+        for(int i = 1; i <= sortedDbRows.size(); i++) {
+            if(i == sortedDbRows.size() || rowComparator.compare(sortedDbRows.get(i - 1), sortedDbRows.get(i)) != 0) {
+                sortByRowDependency(sortedDbRows.subList(start, i));
+                start = i;
+            }
+        }
+    }
+
+    private void sortByRowDependency(List<DbRowOp> tiedRun) {
+        if(!spansMultipleEntities(tiedRun)) {
+            return;
+        }
+        try {
+            List<DbRowOp> sorted = getDependencySorter().sort(new ArrayList<>(tiedRun));
+            if(sorted.size() == tiedRun.size()) {
+                Collections.copy(tiedRun, sorted);
+            }
+        } catch (RuntimeException ex) {
+            // a row-level cycle or an unresolvable dependency must not turn a flush that would otherwise run into
+            // an internal failure, so the run keeps the order the comparator gave it
+        }
+    }
+
+    private boolean spansMultipleEntities(List<DbRowOp> dbRows) {
+        if(dbRows.size() < 2) {
+            return false;
+        }
+        DbEntity first = dbRows.get(0).getEntity();
+        for(int i = 1; i < dbRows.size(); i++) {
+            if(dbRows.get(i).getEntity() != first) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private DbRowOpSorter getDependencySorter() {
+        DbRowOpSorter local = dependencySorter;
+        if(local == null) {
+            synchronized (this) {
+                local = dependencySorter;
+                if(local == null) {
+                    local = new GraphBasedDbRowOpSorter(dataDomainProvider);
+                    dependencySorter = local;
+                }
+            }
+        }
+        return local;
     }
 
     protected void sortReflexive(List<DbRowOp> sortedDbRows) {
