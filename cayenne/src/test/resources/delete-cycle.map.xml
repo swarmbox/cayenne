@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dataMap xmlns="http://cayenne.apache.org/schema/14/dataMap"
+	 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	 xsi:schemaLocation="http://cayenne.apache.org/schema/14/dataMap https://cayenne.apache.org/schema/14/dataMap.xsd"
+	 defaultSuperclass="org.apache.cayenne.GenericPersistentObject">
+	<dbEntity name="DEL_CYCLE_A">
+		<dbAttribute name="B_REF" type="INTEGER"/>
+		<dbAttribute name="DISC" type="VARCHAR" length="10"/>
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="PARENT_ID" type="INTEGER"/>
+	</dbEntity>
+	<dbEntity name="DEL_CYCLE_A_SUB">
+		<dbAttribute name="EXTRA" type="VARCHAR" length="10"/>
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+	</dbEntity>
+	<dbEntity name="DEL_CYCLE_B">
+		<dbAttribute name="A_REF" type="INTEGER"/>
+		<dbAttribute name="B_ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+	</dbEntity>
+	<dbEntity name="DEL_CYCLE_E">
+		<dbAttribute name="F_REF" type="INTEGER"/>
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="PARENT_ID" type="INTEGER"/>
+	</dbEntity>
+	<dbEntity name="DEL_CYCLE_E_EXT">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="NOTE" type="VARCHAR" length="10"/>
+	</dbEntity>
+	<dbEntity name="DEL_CYCLE_F">
+		<dbAttribute name="E_REF" type="INTEGER"/>
+		<dbAttribute name="F_ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+	</dbEntity>
+	<objEntity name="DelCycleB" className="org.apache.cayenne.GenericPersistentObject" dbEntityName="DEL_CYCLE_B"/>
+	<objEntity name="DelCycleE" className="org.apache.cayenne.GenericPersistentObject" dbEntityName="DEL_CYCLE_E">
+		<objAttribute name="note" type="java.lang.String" dbAttributePath="ext.NOTE"/>
+	</objEntity>
+	<objEntity name="DelCycleF" className="org.apache.cayenne.GenericPersistentObject" dbEntityName="DEL_CYCLE_F"/>
+	<objEntity name="DelCycleRoot" className="org.apache.cayenne.GenericPersistentObject" dbEntityName="DEL_CYCLE_A">
+		<objAttribute name="disc" type="java.lang.String" dbAttributePath="DISC"/>
+	</objEntity>
+	<objEntity name="DelCycleSub" superEntityName="DelCycleRoot" className="org.apache.cayenne.GenericPersistentObject">
+		<qualifier><![CDATA[disc = "S"]]></qualifier>
+		<objAttribute name="extra" type="java.lang.String" dbAttributePath="sub.EXTRA"/>
+	</objEntity>
+	<dbRelationship name="b" source="DEL_CYCLE_A" target="DEL_CYCLE_B">
+		<dbAttributePair source="B_REF" target="B_ID"/>
+	</dbRelationship>
+	<dbRelationship name="bs" source="DEL_CYCLE_A" target="DEL_CYCLE_B" toMany="true">
+		<dbAttributePair source="ID" target="A_REF"/>
+	</dbRelationship>
+	<dbRelationship name="children" source="DEL_CYCLE_A" target="DEL_CYCLE_A" toMany="true">
+		<dbAttributePair source="ID" target="PARENT_ID"/>
+	</dbRelationship>
+	<dbRelationship name="parent" source="DEL_CYCLE_A" target="DEL_CYCLE_A">
+		<dbAttributePair source="PARENT_ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="sub" source="DEL_CYCLE_A" target="DEL_CYCLE_A_SUB" toDependentPK="true">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="master" source="DEL_CYCLE_A_SUB" target="DEL_CYCLE_A">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="a" source="DEL_CYCLE_B" target="DEL_CYCLE_A">
+		<dbAttributePair source="A_REF" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="as" source="DEL_CYCLE_B" target="DEL_CYCLE_A" toMany="true">
+		<dbAttributePair source="B_ID" target="B_REF"/>
+	</dbRelationship>
+	<dbRelationship name="children" source="DEL_CYCLE_E" target="DEL_CYCLE_E" toMany="true">
+		<dbAttributePair source="ID" target="PARENT_ID"/>
+	</dbRelationship>
+	<dbRelationship name="ext" source="DEL_CYCLE_E" target="DEL_CYCLE_E_EXT" toDependentPK="true">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="f" source="DEL_CYCLE_E" target="DEL_CYCLE_F">
+		<dbAttributePair source="F_REF" target="F_ID"/>
+	</dbRelationship>
+	<dbRelationship name="parent" source="DEL_CYCLE_E" target="DEL_CYCLE_E">
+		<dbAttributePair source="PARENT_ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="master" source="DEL_CYCLE_E_EXT" target="DEL_CYCLE_E">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="e" source="DEL_CYCLE_F" target="DEL_CYCLE_E">
+		<dbAttributePair source="E_REF" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="es" source="DEL_CYCLE_F" target="DEL_CYCLE_E" toMany="true">
+		<dbAttributePair source="F_ID" target="F_REF"/>
+	</dbRelationship>
+	<objRelationship name="as" source="DelCycleB" target="DelCycleRoot" dbRelationshipPath="as"/>
+	<objRelationship name="children" source="DelCycleE" target="DelCycleE" dbRelationshipPath="children"/>
+	<objRelationship name="es" source="DelCycleF" target="DelCycleE" dbRelationshipPath="es"/>
+	<objRelationship name="f" source="DelCycleE" target="DelCycleF" dbRelationshipPath="f"/>
+	<objRelationship name="parent" source="DelCycleE" target="DelCycleE" dbRelationshipPath="parent"/>
+	<objRelationship name="b" source="DelCycleRoot" target="DelCycleB" dbRelationshipPath="b"/>
+	<objRelationship name="children" source="DelCycleRoot" target="DelCycleRoot" dbRelationshipPath="children"/>
+	<objRelationship name="parent" source="DelCycleRoot" target="DelCycleRoot" dbRelationshipPath="parent"/>
+</dataMap>

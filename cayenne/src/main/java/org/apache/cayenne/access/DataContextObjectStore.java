@@ -40,6 +40,8 @@ import org.apache.cayenne.graph.NodeDiff;
 import org.apache.cayenne.graph.NodePropertyChangeOperation;
 import org.apache.cayenne.map.EntityInheritanceTree;
 import org.apache.cayenne.query.ObjectSelect;
+import org.apache.cayenne.query.Query;
+import org.apache.cayenne.query.SelectById;
 import org.apache.cayenne.reflect.ClassDescriptor;
 import org.apache.cayenne.reflect.PropertyDescriptor;
 import org.apache.cayenne.reflect.ToManyProperty;
@@ -51,6 +53,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -75,6 +78,10 @@ public class DataContextObjectStore implements ObjectStore {
     private static final int OBJECT_LOCK_STRIPES = Math.min(
             64,
             Integer.highestOneBit(Runtime.getRuntime().availableProcessors() * 4 * 2 - 1));
+
+    // the most ids one query of getSnapshots(..) matches. Each id is a term of the query's qualifier, and a database
+    // may be unable to prepare a qualifier of many thousands of terms, as HSQLDB is
+    private static final int MAX_IDS_PER_SNAPSHOT_QUERY = 1000;
 
     protected final DataContext context;
     protected final DataRowStore dataRowCache;
@@ -635,8 +642,7 @@ public class DataContextObjectStore implements ObjectStore {
             return row;
         }
 
-        // a temporary id without a replacement can't match anything in the database
-        if (context.getChannel() == null || oid.isTemporary() && !oid.isReplacementIdAttached()) {
+        if (!canFetchSnapshot(oid)) {
             return null;
         }
 
@@ -652,6 +658,85 @@ public class DataContextObjectStore implements ObjectStore {
             default -> throw new CayenneRuntimeException(
                     "Expected zero or one row for id %s, instead query matched: %d", oid, rows.size());
         };
+    }
+
+    /**
+     * Returns the snapshots of the given ids, as {@link #getSnapshot(ObjectId)} does one at a time, but fetching the
+     * ids missing from the cache with one query per entity and up to 1,000 ids, or up to the domain's maximum id
+     * qualifier size if that is smaller. The result is keyed by the given ids and leaves out those with no matching
+     * row.
+     *
+     * @since 5.0
+     */
+    public Map<ObjectId, DataRow> getSnapshots(Collection<ObjectId> ids) {
+        Map<ObjectId, DataRow> snapshots = HashMap.newHashMap(ids.size());
+
+        // per entity, the ids to fetch, keyed by the id a fetched row of each builds
+        Map<String, Map<ObjectId, ObjectId>> missesByEntity = new LinkedHashMap<>();
+        for (ObjectId id : ids) {
+            DataRow row = dataRowCache != null ? getCachedSnapshot(id) : getSnapshot(id);
+            if (row != null) {
+                snapshots.put(id, row);
+            } else if (dataRowCache != null && canFetchSnapshot(id)) {
+                missesByEntity.computeIfAbsent(id.getEntityName(), name -> new LinkedHashMap<>())
+                        .put(ObjectId.of(id.getEntityName(), id.getIdSnapshot()), id);
+            }
+        }
+
+        missesByEntity.forEach((entityName, misses) -> fetchSnapshots(entityName, misses, snapshots));
+        return snapshots;
+    }
+
+    private boolean canFetchSnapshot(ObjectId id) {
+        // a temporary id without a replacement can't match anything in the database
+        return context.getChannel() != null && !(id.isTemporary() && !id.isReplacementIdAttached());
+    }
+
+    private void fetchSnapshots(String entityName, Map<ObjectId, ObjectId> misses, Map<ObjectId, DataRow> snapshots) {
+        List<ObjectId> fetchIds = new ArrayList<>(misses.keySet());
+        int maxIds = context.getChannel().getDataDomain().getMaxIdQualifierSize();
+        int chunkSize = maxIds > 0 ? Math.min(maxIds, MAX_IDS_PER_SNAPSHOT_QUERY) : MAX_IDS_PER_SNAPSHOT_QUERY;
+
+        for (int from = 0; from < fetchIds.size(); from += chunkSize) {
+            List<ObjectId> chunk = fetchIds.subList(from, Math.min(from + chunkSize, fetchIds.size()));
+            Set<String> idNames = chunk.getFirst().getIdSnapshot().keySet();
+            Query query = snapshotQuery(entityName, chunk, idNames);
+
+            for (Object row : QueryResults.firstList(context.getChannel().onQuery(context, query, false))) {
+                DataRow dataRow = (DataRow) row;
+                ObjectId requestedId = misses.get(idOfRow(entityName, idNames, dataRow));
+                if (requestedId != null) {
+                    snapshots.put(requestedId, dataRow);
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns a query for the rows of the ids: an IN list over a single-column key, which a database matches through
+     * the key's index, or one OR term per id over a compound key.
+     */
+    private static Query snapshotQuery(String entityName, List<ObjectId> ids, Set<String> idNames) {
+        if (idNames.size() != 1) {
+            return SelectById.dataRowQueryObjectIdsCollection(ids);
+        }
+
+        String keyName = idNames.iterator().next();
+        List<Object> keys = new ArrayList<>(ids.size());
+        for (ObjectId id : ids) {
+            keys.add(id.getIdSnapshot().get(keyName));
+        }
+        return ObjectSelect.query(DataRow.class, entityName)
+                .fetchDataRows()
+                .where(ExpressionFactory.inDbExp(keyName, keys));
+    }
+
+    private static ObjectId idOfRow(String entityName, Set<String> idNames, DataRow row) {
+        Map<String, Object> idSnapshot = HashMap.newHashMap(idNames.size());
+        for (String name : idNames) {
+            idSnapshot.put(name, row.get(name));
+        }
+        return ObjectId.of(entityName, idSnapshot);
     }
 
     /**

@@ -19,14 +19,22 @@
 
 package org.apache.cayenne.access.flush;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import org.apache.cayenne.DataRow;
+import org.apache.cayenne.DataRowLayout;
 import org.apache.cayenne.ObjectId;
 import org.apache.cayenne.PersistenceState;
 import org.apache.cayenne.Persistent;
+import org.apache.cayenne.access.DataContext;
+import org.apache.cayenne.access.DataContextObjectStore;
 import org.apache.cayenne.access.DataDomain;
 import org.apache.cayenne.access.flush.operation.DefaultDbRowOpSorter;
 import org.apache.cayenne.access.flush.operation.BaseDbRowOp;
@@ -35,8 +43,11 @@ import org.apache.cayenne.access.flush.operation.DbRowOpSorter;
 import org.apache.cayenne.access.flush.operation.DeleteDbRowOp;
 import org.apache.cayenne.access.flush.operation.InsertDbRowOp;
 import org.apache.cayenne.access.flush.operation.UpdateDbRowOp;
+import org.apache.cayenne.map.DataMap;
 import org.apache.cayenne.map.DbAttribute;
 import org.apache.cayenne.map.DbEntity;
+import org.apache.cayenne.map.DbJoin;
+import org.apache.cayenne.map.DbRelationship;
 import org.apache.cayenne.map.EntityResolver;
 import org.apache.cayenne.map.EntitySorter;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,12 +60,15 @@ import static org.mockito.Mockito.*;
 public class DefaultDbRowOpSorterTest {
 
     private EntitySorter entitySorter;
+    private EntityResolver entityResolver;
+    private DataMap dataMap;
     private DbRowOpSorter sorter;
 
     @BeforeEach
     public void createSorter() {
         entitySorter = mock(EntitySorter.class);
-        EntityResolver entityResolver = mock(EntityResolver.class);
+        entityResolver = mock(EntityResolver.class);
+        dataMap = new DataMap("sorter-test-map");
 
         when(entitySorter.getDbEntityComparator())
                 .thenReturn(Comparator.comparing(DbEntity::getName));
@@ -219,10 +233,287 @@ public class DefaultDbRowOpSorterTest {
         verifyNoMoreInteractions(entitySorter); // shouldn't call entity sorter
     }
 
+    @Test
+    public void tiedRunIsOrderedByRowDependencyWhenTheDependentComesFirst() {
+        // named so that the required output order -- referenced row first -- is the reverse of entity name order
+        DbEntity dependent = mockEntity("a_dependent");
+        DbEntity referenced = mockEntity("z_referenced");
+        DbAttribute fk = wireDependency(dependent, "ref_id", referenced);
+        tieEntityComparator();
+
+        ObjectId dependentId = ObjectId.of("Dependent", "id", 1);
+        ObjectId referencedId = ObjectId.of("Referenced", "id", 100);
+        InsertDbRowOp dependentOp = new InsertDbRowOp(mockObject(dependentId), dependent, dependentId);
+        InsertDbRowOp referencedOp = new InsertDbRowOp(mockObject(referencedId), referenced, referencedId);
+        dependentOp.getValues().addValue(fk, 100, true);
+
+        List<DbRowOp> sorted = sorter.sort(new ArrayList<>(List.of(dependentOp, referencedOp)));
+        assertEquals(List.of(referencedOp, dependentOp), sorted);
+    }
+
+    @Test
+    public void tiedRunKeepsACorrectOrderWhenTheDependentComesLast() {
+        DbEntity dependent = mockEntity("a_dependent");
+        DbEntity referenced = mockEntity("z_referenced");
+        DbAttribute fk = wireDependency(dependent, "ref_id", referenced);
+        tieEntityComparator();
+
+        ObjectId dependentId = ObjectId.of("Dependent", "id", 1);
+        ObjectId referencedId = ObjectId.of("Referenced", "id", 100);
+        InsertDbRowOp dependentOp = new InsertDbRowOp(mockObject(dependentId), dependent, dependentId);
+        InsertDbRowOp referencedOp = new InsertDbRowOp(mockObject(referencedId), referenced, referencedId);
+        dependentOp.getValues().addValue(fk, 100, true);
+
+        List<DbRowOp> sorted = sorter.sort(new ArrayList<>(List.of(referencedOp, dependentOp)));
+        assertEquals(List.of(referencedOp, dependentOp), sorted);
+    }
+
+    @Test
+    public void anOperationDoesNotCrossAComparatorBoundaryToSatisfyADependency() {
+        DbEntity dependent = mockEntity("a_dependent");
+        DbEntity referenced = mockEntity("z_referenced");
+        DbAttribute fk = wireDependency(dependent, "ref_id", referenced);
+
+        ObjectId dependentId = ObjectId.of("Dependent", "id", 1);
+        ObjectId referencedId = ObjectId.of("Referenced", "id", 100);
+        InsertDbRowOp dependentOp = new InsertDbRowOp(mockObject(dependentId), dependent, dependentId);
+        UpdateDbRowOp referencedOp = new UpdateDbRowOp(mockObject(referencedId), referenced, referencedId);
+        dependentOp.getValues().addValue(fk, 100, true);
+
+        // the dependency edge points at the update, but operation type ordering is not negotiable
+        List<DbRowOp> sorted = sorter.sort(new ArrayList<>(List.of(referencedOp, dependentOp)));
+        assertEquals(List.of(dependentOp, referencedOp), sorted);
+    }
+
+    @Test
+    public void aCycleInATiedRunLeavesTheInputOrderAndDoesNotThrow() {
+        // the required output is the input order, which is the reverse of both name order and ascending id order
+        DbEntity first = mockEntity("z_cycle_first");
+        DbEntity second = mockEntity("a_cycle_second");
+        DbAttribute firstFk = wireDependency(first, "second_id", second);
+        DbAttribute secondFk = wireDependency(second, "first_id", first);
+        tieEntityComparator();
+
+        ObjectId firstId = ObjectId.of("First", "id", 200);
+        ObjectId secondId = ObjectId.of("Second", "id", 100);
+        InsertDbRowOp firstOp = new InsertDbRowOp(mockObject(firstId), first, firstId);
+        InsertDbRowOp secondOp = new InsertDbRowOp(mockObject(secondId), second, secondId);
+        firstOp.getValues().addValue(firstFk, 100, true);
+        secondOp.getValues().addValue(secondFk, 200, true);
+
+        List<DbRowOp> sorted = sorter.sort(new ArrayList<>(List.of(firstOp, secondOp)));
+        assertEquals(List.of(firstOp, secondOp), sorted);
+    }
+
+    @Test
+    public void updateRunThatWritesNoReferencedColumnReadsNoSnapshot() {
+        DbEntity dependent = mockEntity("a_dependent");
+        DbEntity referenced = mockEntity("z_referenced");
+        DbAttribute fk = wireDependency(dependent, "ref_id", referenced);
+        tieEntityComparator();
+
+        ObjectId dependentId = ObjectId.of("Dependent", "id", 1);
+        ObjectId referencedId = ObjectId.of("Referenced", "id", 100);
+        Persistent dependentObject = mockObject(dependentId);
+        Persistent referencedObject = mockObject(referencedId);
+        UpdateDbRowOp dependentOp = new UpdateDbRowOp(dependentObject, dependent, dependentId);
+        UpdateDbRowOp referencedOp = new UpdateDbRowOp(referencedObject, referenced, referencedId);
+        // the foreign key moves, but no update writes the primary key it references
+        dependentOp.getValues().addValue(fk, 100, true);
+        referencedOp.getValues().addValue(referenced.getAttribute("attr"), "changed", false);
+
+        List<DbRowOp> sorted = sorter.sort(new ArrayList<>(List.of(referencedOp, dependentOp)));
+
+        assertEquals(List.of(referencedOp, dependentOp), sorted);
+        // the dependency sorter reads the committed snapshots through the objects' context
+        verify(dependentObject, never()).getObjectContext();
+        verify(referencedObject, never()).getObjectContext();
+    }
+
+    @Test
+    public void updateRunThatWritesAReferencedColumnIsOrderedByRowDependency() {
+        DbEntity dependent = mockEntity("a_dependent");
+        DbEntity referenced = mockEntity("z_referenced");
+        DbAttribute fk = wireDependency(dependent, "ref_id", referenced);
+        tieEntityComparator();
+
+        ObjectId dependentId = ObjectId.of("Dependent", "id", 1);
+        ObjectId referencedId = ObjectId.of("Referenced", "id", 100);
+        UpdateDbRowOp dependentOp = new UpdateDbRowOp(mockObjectWithNoSnapshot(dependentId), dependent, dependentId);
+        UpdateDbRowOp referencedOp = new UpdateDbRowOp(
+                mockObjectWithNoSnapshot(referencedId), referenced, referencedId);
+        dependentOp.getValues().addValue(fk, 100, true);
+        // the referenced row changes its primary key, so the row pointing at it is updated first
+        referencedOp.getValues().addValue(referenced.getAttribute("id"), 101, false);
+
+        List<DbRowOp> sorted = sorter.sort(new ArrayList<>(List.of(referencedOp, dependentOp)));
+
+        assertEquals(List.of(dependentOp, referencedOp), sorted);
+    }
+
+    @Test
+    public void aCycleInATiedRunIsNotLoggedAsAWarning() {
+        DbEntity first = mockEntity("z_cycle_first");
+        DbEntity second = mockEntity("a_cycle_second");
+        DbAttribute firstFk = wireDependency(first, "second_id", second);
+        DbAttribute secondFk = wireDependency(second, "first_id", first);
+        tieEntityComparator();
+
+        ObjectId firstId = ObjectId.of("First", "id", 200);
+        ObjectId secondId = ObjectId.of("Second", "id", 100);
+        InsertDbRowOp firstOp = new InsertDbRowOp(mockObject(firstId), first, firstId);
+        InsertDbRowOp secondOp = new InsertDbRowOp(mockObject(secondId), second, secondId);
+        firstOp.getValues().addValue(firstFk, 100, true);
+        secondOp.getValues().addValue(secondFk, 200, true);
+
+        // the test logger writes WARN and above to System.err, and leaves out DEBUG
+        ByteArrayOutputStream log = new ByteArrayOutputStream();
+        PrintStream err = System.err;
+        System.setErr(new PrintStream(log, true));
+        try {
+            sorter.sort(new ArrayList<>(List.of(firstOp, secondOp)));
+        } finally {
+            System.setErr(err);
+        }
+
+        assertEquals("", log.toString());
+    }
+
+    /**
+     * An UPDATE releases a foreign key only by writing it, so an update run that changes a primary key reads no
+     * committed row of the updates that write no foreign key.
+     */
+    @Test
+    public void updateRunReadsNoCommittedRowOfUpdatesThatWriteNoForeignKey() {
+        DbEntity dependent = mockEntity("a_dependent");
+        DbEntity referenced = mockEntity("z_referenced");
+        wireDependency(dependent, "ref_id", referenced);
+        tieEntityComparator();
+
+        ObjectId dependentId = ObjectId.of("Dependent", "id", 1);
+        ObjectId referencedId = ObjectId.of("Referenced", "id", 100);
+        Persistent dependentObject = mockObject(dependentId);
+        Persistent referencedObject = mockObject(referencedId);
+        UpdateDbRowOp dependentOp = new UpdateDbRowOp(dependentObject, dependent, dependentId);
+        UpdateDbRowOp referencedOp = new UpdateDbRowOp(referencedObject, referenced, referencedId);
+        dependentOp.getValues().addValue(dependent.getAttribute("attr"), "renamed", false);
+        referencedOp.getValues().addValue(referenced.getAttribute("id"), 101, false);
+
+        sorter.sort(new ArrayList<>(List.of(referencedOp, dependentOp)));
+
+        verify(dependentObject, never()).getObjectContext();
+        verify(referencedObject, never()).getObjectContext();
+    }
+
+    /**
+     * A delete run reads the committed rows it needs in one batch, and only those that hold a foreign key to an
+     * entity of the run.
+     */
+    @Test
+    public void deleteRunReadsTheCommittedRowsItNeedsInOneBatch() {
+        DbEntity dependent = mockEntity("a_dependent");
+        DbEntity referenced = mockEntity("z_referenced");
+        DbEntity unrelated = mockEntity("m_unrelated");
+        wireDependency(dependent, "ref_id", referenced);
+        wireDependency(referenced, "unrelated_id", unrelated);
+        when(entityResolver.getDbEntities()).thenReturn(List.of(referenced, dependent, unrelated));
+        tieEntityComparator();
+
+        DataContextObjectStore store = mock(DataContextObjectStore.class);
+        ObjectId dependentId = ObjectId.of("Dependent", "id", 1);
+        ObjectId referencedId = ObjectId.of("Referenced", "id", 100);
+        DataRow dependentRow = DataRow.of("Dependent", DataRowLayout.of("ref_id"), new Object[] {100}, 1);
+        when(store.getSnapshots(any())).thenReturn(Map.of(dependentId, dependentRow));
+        DeleteDbRowOp referencedOp = new DeleteDbRowOp(
+                mockObjectInStore(referencedId, store), referenced, referencedId);
+        DeleteDbRowOp dependentOp = new DeleteDbRowOp(mockObjectInStore(dependentId, store), dependent, dependentId);
+
+        List<DbRowOp> sorted = sorter.sort(new ArrayList<>(List.of(referencedOp, dependentOp)));
+
+        // the dependent row goes first, as it references the other one
+        assertEquals(List.of(dependentOp, referencedOp), sorted);
+        verify(store).getSnapshots(Set.of(dependentId));
+        verify(store, never()).getSnapshot(any());
+    }
+
+    @Test
+    public void singleEntityListDoesNotConsultTheEntityComparatorBeyondTheMainSort() {
+        ObjectId id1 = ObjectId.of("single", "id", 1);
+        ObjectId id2 = ObjectId.of("single", "id", 2);
+        ObjectId id3 = ObjectId.of("single", "id", 3);
+        ObjectId id4 = ObjectId.of("single", "id", 4);
+
+        DbEntity single = mockEntity("single");
+        DbRowOp op1 = new InsertDbRowOp(mockObject(id1), single, id1);
+        DbRowOp op2 = new InsertDbRowOp(mockObject(id2), single, id2);
+        DbRowOp op3 = new InsertDbRowOp(mockObject(id3), single, id3);
+        DbRowOp op4 = new InsertDbRowOp(mockObject(id4), single, id4);
+
+        List<DbRowOp> rows = Arrays.asList(op1, op2, op3, op4);
+        List<DbRowOp> sorted = sorter.sort(rows);
+
+        assertEquals(Arrays.asList(op1, op2, op3, op4), sorted);
+        // three comparisons is what List.sort alone makes for a four-element input
+        verify(entitySorter, times(3)).getDbEntityComparator();
+        verify(entitySorter).isReflexive(any(DbEntity.class));
+        verifyNoMoreInteractions(entitySorter);
+    }
+
+    /**
+     * Makes the entity comparator tie every pair, so that the operations land in a single maximal run the
+     * comparator cannot separate -- the shape a strongly connected component produces in production.
+     */
+    private void tieEntityComparator() {
+        when(entitySorter.getDbEntityComparator()).thenReturn((left, right) -> 0);
+    }
+
+    /**
+     * Wires one direction of a foreign key: gives {@code dependent} an FK attribute and a to-one relationship into
+     * the primary key of {@code referenced}. Both entities are added to a real DataMap, without which
+     * {@code DbRelationship.isToPK()} throws while resolving the join target and the dependency is silently lost.
+     */
+    private DbAttribute wireDependency(DbEntity dependent, String fkName, DbEntity referenced) {
+        dataMap.addDbEntity(dependent);
+        dataMap.addDbEntity(referenced);
+
+        DbAttribute fk = new DbAttribute(fkName);
+        dependent.addAttribute(fk);
+
+        DbRelationship relationship = new DbRelationship(fkName + "_to_" + referenced.getName());
+        relationship.setTargetEntityName(referenced.getName());
+        dependent.addRelationship(relationship);
+        relationship.addJoin(new DbJoin(relationship, fkName, "id"));
+
+        when(entityResolver.getDbEntities()).thenReturn(List.of(referenced, dependent));
+        return fk;
+    }
+
     private Persistent mockObject(ObjectId id) {
         Persistent persistent = mock(Persistent.class);
         when(persistent.getObjectId()).thenReturn(id);
         when(persistent.getPersistenceState()).thenReturn(PersistenceState.MODIFIED);
+        return persistent;
+    }
+
+    /**
+     * An object in a context whose object store has no committed snapshot of it, which is all the dependency sorter
+     * needs to read the previous state of an update.
+     */
+    private Persistent mockObjectWithNoSnapshot(ObjectId id) {
+        DataContext context = mock(DataContext.class);
+        when(context.getObjectStore()).thenReturn(mock(DataContextObjectStore.class));
+
+        Persistent persistent = mockObject(id);
+        when(persistent.getObjectContext()).thenReturn(context);
+        return persistent;
+    }
+
+    private Persistent mockObjectInStore(ObjectId id, DataContextObjectStore store) {
+        DataContext context = mock(DataContext.class);
+        when(context.getObjectStore()).thenReturn(store);
+
+        Persistent persistent = mockObject(id);
+        when(persistent.getObjectContext()).thenReturn(context);
         return persistent;
     }
 

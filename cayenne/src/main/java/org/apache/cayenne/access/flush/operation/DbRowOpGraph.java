@@ -109,7 +109,7 @@ class DbRowOpGraph {
 		// Check that we have used the entire graph (if not, there was a cycle)
 		if (result.size() != neighbors.size()) {
 			Set<DbRowOp> remainingKeys = new HashSet<>(neighbors.keySet());
-			remainingKeys.removeIf(result::contains);
+			result.forEach(remainingKeys::remove);
 			throw new IllegalStateException("Cycle detected in list for keys: " + remainingKeys);
 		}
 

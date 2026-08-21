@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.cayenne.DataRow;
+import org.apache.cayenne.ObjectId;
 import org.apache.cayenne.Persistent;
 import org.apache.cayenne.access.DataContext;
 import org.apache.cayenne.access.DataContextObjectStore;
@@ -106,11 +107,12 @@ public class GraphBasedDbRowOpSorter implements DbRowOpSorter {
                 .add(op)
         );
         boolean hasMeaningfulIds = indexById.size() != dbRows.size();
+        CommittedRows committedRows = committedRows(dbRows);
 
         // build ops dependency graph
         DbRowOpGraph graph = new DbRowOpGraph();
         dbRows.forEach(op -> {
-            processRelationships(indexById, graph, op);
+            processRelationships(indexById, graph, op, committedRows);
             if(hasMeaningfulIds) {
                 processMeaningfulIds(indexById, graph, op);
             }
@@ -121,11 +123,19 @@ public class GraphBasedDbRowOpSorter implements DbRowOpSorter {
         return graph.topSort();
     }
 
-    private void processRelationships(Map<EffectiveOpId, List<DbRowOp>> indexByDbId, DbRowOpGraph graph, DbRowOp op) {
+    /**
+     * Returns how the committed rows of the operations being sorted are read. Called once per {@link #sort(List)}.
+     */
+    CommittedRows committedRows(List<DbRowOp> dbRows) {
+        return CommittedRows.FROM_OBJECT_STORE;
+    }
+
+    private void processRelationships(Map<EffectiveOpId, List<DbRowOp>> indexByDbId, DbRowOpGraph graph, DbRowOp op,
+                                      CommittedRows committedRows) {
         // get graph edges for reflexive relationships
         DbRowOpType opType = op.accept(rowOpTypeVisitor);
         relationships.getOrDefault(op.getEntity(), Collections.emptyList()).forEach(relationship ->
-            getParentsOpId(op, relationship).forEach((parentOpId, snapshot) ->
+            getParentsOpId(op, relationship, committedRows).forEach((parentOpId, snapshot) ->
                 indexByDbId.getOrDefault(parentOpId, Collections.emptyList()).forEach(parentOp -> {
                     if(op == parentOp) {
                         return;
@@ -185,8 +195,13 @@ public class GraphBasedDbRowOpSorter implements DbRowOpSorter {
         });
     }
 
-    private Map<EffectiveOpId, Map<String, Object>> getParentsOpId(DbRowOp op, DbRelationship relationship) {
-        List<Map<String, Object>> parentIdSnapshots = op.accept(new DbRowOpSnapshotVisitor(relationship));
+    private Map<EffectiveOpId, Map<String, Object>> getParentsOpId(DbRowOp op, DbRelationship relationship,
+                                                                   CommittedRows committedRows) {
+        if(!committedRows.follows(relationship)) {
+            return Collections.emptyMap();
+        }
+        List<Map<String, Object>> parentIdSnapshots =
+                op.accept(new DbRowOpSnapshotVisitor(relationship, committedRows));
         if(parentIdSnapshots.size() == 1) {
             EffectiveOpId id = effectiveIdFor(relationship, parentIdSnapshots.get(0));
             if(id != null) {
@@ -228,12 +243,48 @@ public class GraphBasedDbRowOpSorter implements DbRowOpSorter {
         return new EffectiveOpId(relationship.getTargetEntityName(), idMap);
     }
 
+    /**
+     * How the committed rows of the operations being sorted are read. An UPDATE or a DELETE depends on another
+     * operation through the foreign key its row held before the flush.
+     */
+    interface CommittedRows {
+
+        CommittedRows FROM_OBJECT_STORE = (op, relationship) -> {
+            // flush only ever handles DataContext objects
+            DataContextObjectStore store = ((DataContext) op.getObject().getObjectContext()).getObjectStore();
+            return store.getSnapshot(op.getObject().getObjectId());
+        };
+
+        /**
+         * Returns whether the dependencies through the relationship are looked for.
+         */
+        default boolean follows(DbRelationship relationship) {
+            return true;
+        }
+
+        /**
+         * Returns the committed row of the operation's object, from which the relationship's foreign key is read, or
+         * null if there is none.
+         */
+        DataRow rowOf(DbRowOp op, DbRelationship relationship);
+
+        /**
+         * Returns whether the key of a flattened row tracked for the operation's object is read as the foreign key of
+         * the relationship, in place of the value of the committed row.
+         */
+        default boolean readsFlattenedId(ObjectId flattenedId, DbRelationship relationship) {
+            return true;
+        }
+    }
+
     private static class DbRowOpSnapshotVisitor implements DbRowOpVisitor<List<Map<String, Object>>> {
 
         private final DbRelationship relationship;
+        private final CommittedRows committedRows;
 
-        private DbRowOpSnapshotVisitor(DbRelationship relationship) {
+        private DbRowOpSnapshotVisitor(DbRelationship relationship, CommittedRows committedRows) {
             this.relationship = relationship;
+            this.committedRows = committedRows;
         }
 
         @Override
@@ -252,7 +303,7 @@ public class GraphBasedDbRowOpSorter implements DbRowOpSorter {
             // get updated state from operation
             result.add(updatedSnapshot);
             // get previous state from cache, but only for update attributes
-            Map<String, Object> cachedSnapshot = getCachedSnapshot(dbRow.getObject());
+            Map<String, Object> cachedSnapshot = getCachedSnapshot(dbRow);
             cachedSnapshot.entrySet().forEach(entry -> {
                 if(!updatedSnapshot.containsKey(entry.getKey())) {
                     entry.setValue(null);
@@ -264,19 +315,20 @@ public class GraphBasedDbRowOpSorter implements DbRowOpSorter {
 
         @Override
         public List<Map<String, Object>> visitDelete(DeleteDbRowOp dbRow) {
-            Map<String, Object> cachedSnapshot = getCachedSnapshot(dbRow.getObject());
+            Map<String, Object> cachedSnapshot = getCachedSnapshot(dbRow);
             return Collections.singletonList(cachedSnapshot);
         }
 
-        private Map<String, Object> getCachedSnapshot(Persistent object) {
-            // flush only ever handles DataContext objects
-            DataContextObjectStore store = ((DataContext) object.getObjectContext()).getObjectStore();
-
+        private Map<String, Object> getCachedSnapshot(DbRowOp dbRow) {
             // the committed state is in the snapshot cache (or the DB), never in the object itself
-            DataRow dataRow = store.getSnapshot(object.getObjectId());
+            DataRow dataRow = committedRows.rowOf(dbRow, relationship);
             if (dataRow == null) {
                 return Collections.emptyMap();
             }
+
+            // flush only ever handles DataContext objects
+            Persistent object = dbRow.getObject();
+            DataContextObjectStore store = ((DataContext) object.getObjectContext()).getObjectStore();
 
             // copy snapshot as we can modify it later
             int joinSize = relationship.getJoins().size();
@@ -292,14 +344,16 @@ public class GraphBasedDbRowOpSorter implements DbRowOpSorter {
 
             // check and merge flattened IDs snapshots
             store.getFlattenedIds(object.getObjectId()).forEach(flattenedId -> {
-                // map values of flattened ids from target to source
-                Map<String, Object> idSnapshot = flattenedId.getIdSnapshot();
-                relationship.getJoins().forEach(join -> {
-                    Object value = idSnapshot.get(join.getTargetName());
-                    if(value != null) {
-                        snapshot.put(join.getSourceName(), value);
-                    }
-                });
+                if (committedRows.readsFlattenedId(flattenedId, relationship)) {
+                    // map values of flattened ids from target to source
+                    Map<String, Object> idSnapshot = flattenedId.getIdSnapshot();
+                    relationship.getJoins().forEach(join -> {
+                        Object value = idSnapshot.get(join.getTargetName());
+                        if(value != null) {
+                            snapshot.put(join.getSourceName(), value);
+                        }
+                    });
+                }
             });
 
             return snapshot;
