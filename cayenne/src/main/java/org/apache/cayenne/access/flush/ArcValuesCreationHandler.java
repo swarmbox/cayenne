@@ -105,7 +105,8 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
         }
 
         if(objRelationship.isFlattened()) {
-            FlattenedPathProcessingResult result = processFlattenedPath(arcTarget.getSourceId(), arcTarget.getTargetId(), entity.getDbEntity(),
+            FlattenedPathProcessingResult result = processFlattenedPath(arcTarget.getSourceId(),
+                    arcTarget.getTargetId(), arcTarget, entity.getDbEntity(),
                     objRelationship.getDbRelationshipPath(), created);
             if(result.isProcessed()) {
                 factory.getProcessedArcs().add(arcTarget);
@@ -117,8 +118,9 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
         }
     }
 
-    FlattenedPathProcessingResult processFlattenedPath(ObjectId id, ObjectId finalTargetId, DbEntity entity, CayennePath dbPath, boolean add) {
-        if(shouldSkipFlattenedOp(id, finalTargetId)) {
+    FlattenedPathProcessingResult processFlattenedPath(ObjectId id, ObjectId finalTargetId,
+            ArcTarget arcTarget, DbEntity entity, CayennePath dbPath, boolean add) {
+        if(shouldSkipFlattenedOp(id, finalTargetId, arcTarget)) {
             return flattenedResultNotProcessed();
         }
 
@@ -478,12 +480,39 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
         return targetToCurrentPk;
     }
 
-    private boolean shouldSkipFlattenedOp(ObjectId id, ObjectId finalTargetId) {
+    /**
+     * Returns whether this arc should be left to the other endpoint's own walk, which has better information.
+     * <p>
+     * Deferring presumes there is a walk to defer to, and the only sound evidence of one is that the other
+     * endpoint <em>declared</em> this arc -- that its own diff carries the reverse event. Route presence cannot
+     * support that inference. A route arises from bookkeeping another object's walk stamped on this one, from
+     * the target's own attribute walk, or from a walk that has already run, so as evidence of a walk still to
+     * come it is wrong in both directions of provenance: a one-sided arc onto a routed target defers to nothing
+     * and the commit reports success with the column left null.
+     * <p>
+     * Asking instead whether the mapping declares an inverse of the arc's relationship is necessary but not
+     * sufficient, and membership subsumes it. A reverse event can only be raised through the reverse
+     * {@link org.apache.cayenne.reflect.ArcProperty}, which cannot exist without a mapped inverse, and
+     * {@link ArcTarget#getReversed()} matches on {@link org.apache.cayenne.graph.ArcId#getReverseId()}, whose
+     * forward/reverse pair an unmapped inverse's synthetic {@code db:}-prefixed name can never satisfy. So
+     * membership implies a mapped inverse, while the converse does not hold: a one-sided arc records an arc
+     * whose inverse the mapping does declare while the target's diff never carries it.
+     * <p>
+     * The two route conjuncts are the tie-break, and are not redundant. They are what makes
+     * mutual deferral structurally impossible: the skip requires the source routeless and the target routed, so
+     * two endpoints can never both stand down for each other. {@code ObjectDiff.apply} runs arc ops before
+     * {@code applySimplePropertyChanges}, so two NEW objects joined by a two-sided arc are both routeless when
+     * the first of them is evaluated; on membership alone both would skip and the write would vanish. That is
+     * the case {@code FlattenedArcDeferralIT.twoSidedArcBetweenTwoNewObjectsWritesItsForeignKey} guards.
+     */
+    private boolean shouldSkipFlattenedOp(ObjectId id, ObjectId finalTargetId, ArcTarget arcTarget) {
         // as we get two sides of the relationship processed,
         // check if we got more information for a reverse operation
         return finalTargetId != null
                 && factory.getFlattenedIds(id).isEmpty()
-                && !factory.getFlattenedIds(finalTargetId).isEmpty();
+                && !factory.getFlattenedIds(finalTargetId).isEmpty()
+                && arcTarget != null
+                && factory.getDeclaredArcs().contains(arcTarget.getReversed());
     }
 
     private boolean shouldProcessAsAddition(DbRelationship relationship, boolean add) {
