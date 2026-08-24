@@ -50,6 +50,7 @@ class DbRowOpFactory implements DbRowOpCreator {
     private final EntityResolver resolver;
     private final DataContextObjectStore store;
     private final Set<ArcTarget> processedArcs;
+    private final Set<ArcTarget> declaredArcs;
     private final Map<ObjectId, DbRowOp> dbRows;
     private final Map<ObjectId, Map<CayennePath, ObjectId>> flattenedPaths;
     private final RootRowOpProcessor rootRowOpProcessor;
@@ -62,6 +63,7 @@ class DbRowOpFactory implements DbRowOpCreator {
     DbRowOpFactory(EntityResolver resolver,
                    DataContextObjectStore store,
                    Set<ArcTarget> processedArcs,
+                   Set<ArcTarget> declaredArcs,
                    DeleteDbRowOpFactory deleteDbRowOpFactory) {
 
         this.resolver = resolver;
@@ -69,6 +71,7 @@ class DbRowOpFactory implements DbRowOpCreator {
         this.dbRows = new HashMap<>(4);
         this.flattenedPaths = new HashMap<>(4);
         this.processedArcs = processedArcs;
+        this.declaredArcs = declaredArcs;
         this.rootRowOpProcessor = new RootRowOpProcessor(this);
         this.deleteDbRowOpFactory = deleteDbRowOpFactory;
     }
@@ -210,5 +213,19 @@ class DbRowOpFactory implements DbRowOpCreator {
 
     Set<ArcTarget> getProcessedArcs() {
         return processedArcs;
+    }
+
+    /**
+     * The arc events this flush's diffs declare, collected once before any row op is built. Unlike
+     * {@link #getProcessedArcs()}, which accumulates as the flush walks, this set is complete from the start:
+     * it is what lets a flattened walk ask whether the other endpoint declared this arc at all, rather than
+     * inferring it from state the walk itself has been stamping.
+     * <p>
+     * Phantom-FK {@code db:}-prefixed arcs are excluded, so this is a strict subset of the events the walk
+     * later sees; a missing member can only cause a miss, and a miss means the walk proceeds. See
+     * {@code DefaultDataDomainFlushAction.collectDeclaredArcs} for why, and for what a wider query would owe.
+     */
+    Set<ArcTarget> getDeclaredArcs() {
+        return declaredArcs;
     }
 }

@@ -329,6 +329,12 @@ public class PermanentIdFlattenedArcIT {
      * derivation cannot succeed, and the row is written correctly for that reason alone -- so this case is not
      * claimed as defect coverage. It is here to show that what distinguishes the case above is the presence of
      * the mapped inverse, not the fact of setting a to-one.
+     * <p>
+     * The mapping is what separates the two cases, and it reaches the decision indirectly. The deferral asks
+     * whether the arc's reverse was declared by this flush, and an unmapped inverse has no way to declare one:
+     * there is no reverse {@code ArcProperty} to raise the event from. So this control rests on no conjunct that
+     * reads the mapping -- the absence it isolates denies the deferral its evidence rather than failing a test
+     * the predicate performs.
      */
     @Test
     public void toOneWithoutAMappedInverseWritesItsChildRowEitherWay() throws SQLException {
