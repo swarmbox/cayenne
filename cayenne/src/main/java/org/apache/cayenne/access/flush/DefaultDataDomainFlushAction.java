@@ -36,7 +36,9 @@ import org.apache.cayenne.access.flush.operation.DeleteDbRowOpFactory;
 import org.apache.cayenne.access.flush.operation.InsertDbRowOp;
 import org.apache.cayenne.access.flush.operation.OpIdFactory;
 import org.apache.cayenne.access.flush.operation.UpdateDbRowOp;
+import org.apache.cayenne.graph.ArcId;
 import org.apache.cayenne.graph.CompoundDiff;
+import org.apache.cayenne.graph.GraphChangeHandler;
 import org.apache.cayenne.graph.GraphDiff;
 import org.apache.cayenne.map.EntityResolver;
 import org.apache.cayenne.query.Query;
@@ -108,6 +110,51 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
     }
 
     /**
+     * Every arc event this flush's diffs declare through their {@code otherDiffs}, collected in one pass before
+     * any row op is built.
+     * <p>
+     * Phantom-FK {@code db:}-prefixed arcs are <b>excluded</b> deliberately, not by oversight: this pass reads
+     * {@code ObjectStoreGraphDiff.apply}, which omits the phantom-FK map, while the later walk reads
+     * {@code ObjectDiff.apply}, which includes it. The set is therefore a strict subset of what the walk sees,
+     * which is safe in the one direction it runs: a missing member can only make membership miss, and a miss
+     * means the walk proceeds. It cannot be reached in any case, since a {@code db:} forward name is handled by
+     * {@code processArcChange}'s null-relationship branch and never reaches the flattened predicate. Anyone
+     * widening this query, or reusing the set for a different question, inherits the gap.
+     * <p>
+     * A flattened walk may skip writing its foreign key only when the arc's other endpoint will write it
+     * instead, and the only sound evidence of that is that the other endpoint <em>declared</em> the arc. Route
+     * presence cannot answer it: routes are stamped by the flush's own bookkeeping, by the target's own
+     * attribute walk, and by walks that have already run, so it is wrong in both directions of provenance.
+     * <p>
+     * <b>Target ids are recorded exactly as the events raise them, with no substitution.</b>
+     * {@code ArcValuesCreationHandler.processArcChange}'s substitution of a created arc's target chooses
+     * <em>which</em> target the flush asks about, and reads per-diff state this pass runs before. This set is a
+     * lookup table keyed by object identity, so it answers correctly for whichever target the query supplies:
+     * a diff's node id and a resolved arc value denote the same object by the same {@link ObjectId}. Where the
+     * two disagree in id <em>form</em> -- a temporary id against the permanent one an insert replaced it with
+     * -- membership misses and the walk proceeds, the conservative direction, since skipping is what silently
+     * loses a write.
+     *
+     * @param changes object graph diff
+     * @return every arc this flush declares, in both create and delete sense
+     */
+    private Set<ArcTarget> collectDeclaredArcs(ObjectStoreGraphDiff changes) {
+        Set<ArcTarget> declared = new HashSet<>();
+        changes.apply(new GraphChangeHandler() {
+            @Override
+            public void arcCreated(ObjectId id, ObjectId targetId, ArcId arcId) {
+                declared.add(new ArcTarget(id, targetId, arcId, false));
+            }
+
+            @Override
+            public void arcDeleted(ObjectId id, ObjectId targetId, ArcId arcId) {
+                declared.add(new ArcTarget(id, targetId, arcId, true));
+            }
+        });
+        return declared;
+    }
+
+    /**
      * Create ops based on incoming graph changes
      * @param objectStore originating object store
      * @param changes object graph diff
@@ -119,8 +166,10 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
         Map<ObjectId, ObjectDiff> changesByObjectId = changes.getChangesByObjectId();
         List<DbRowOp> ops = new ArrayList<>(changesByObjectId.size());
         Set<ArcTarget> processedArcs = new HashSet<>();
+        Set<ArcTarget> declaredArcs = collectDeclaredArcs(changes);
 
-        DbRowOpFactory factory = new DbRowOpFactory(resolver, objectStore, processedArcs, deleteDbRowOpFactory);
+        DbRowOpFactory factory = new DbRowOpFactory(resolver, objectStore, processedArcs, declaredArcs,
+                deleteDbRowOpFactory);
         dbRowOpFactory = factory;
         // ops.addAll() method is slower in this case as it will allocate new array for all values
         //noinspection UseBulkOperation
