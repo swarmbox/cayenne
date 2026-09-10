@@ -46,6 +46,12 @@ import static org.mockito.Mockito.*;
 
 public class DefaultDataDomainFlushActionTest {
 
+    /**
+     * Enough operations that a hash-ordered index is overwhelmingly unlikely to iterate them in first-appearance
+     * order by coincidence.
+     */
+    private static final int ORDER_PROBE_SIZE = 32;
+
     @Test
     public void mergeSameObjectIds() {
         ObjectId id1  = ObjectId.of("test2", "id", 1);
@@ -208,6 +214,36 @@ public class DefaultDataDomainFlushActionTest {
 
         List<? extends Query> queries = action.createQueries(ops);
         assertEquals(6, queries.size());
+    }
+
+    /**
+     * The merge rebuilds the operation list wholesale from its index, so the index's iteration order is the
+     * order the sorter receives -- and the sorter keeps the order it is handed wherever it has no dependency to
+     * act on. First-appearance order is what {@code createDbRowOps} established; hash order discards it.
+     */
+    @Test
+    public void mergeSameObjectIdsPreservesFirstAppearanceOrder() {
+        DbEntity test = mockEntity("test");
+
+        List<DbRowOp> ops = new ArrayList<>(ORDER_PROBE_SIZE);
+        List<ObjectId> firstAppearance = new ArrayList<>(ORDER_PROBE_SIZE);
+        for (int i = 0; i < ORDER_PROBE_SIZE; i++) {
+            ObjectId id = ObjectId.of("test", "id", i);
+            ops.add(new InsertDbRowOp(mockObject(id), test, id));
+            firstAppearance.add(id);
+        }
+
+        DefaultDataDomainFlushAction action = mock(DefaultDataDomainFlushAction.class);
+        when(action.mergeSameObjectIds((List<DbRowOp>) any(List.class))).thenCallRealMethod();
+
+        List<DbRowOp> merged = action.mergeSameObjectIds(ops);
+
+        List<ObjectId> mergedOrder = new ArrayList<>(merged.size());
+        for (DbRowOp op : merged) {
+            mergedOrder.add(op.getChangeId());
+        }
+        assertEquals(firstAppearance, mergedOrder,
+                "the merged list must keep first-appearance order, not ObjectId hash order");
     }
 
     private Persistent mockObject(ObjectId id) {

@@ -52,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -100,7 +101,7 @@ public class DataContextObjectStore implements ObjectStore {
             weakValueMap.setKeyCleanupCallback(this::onObjectKeyCleanup);
         }
 
-        this.changes = new HashMap<>();
+        this.changes = new LinkedHashMap<>();
 
         if (syncWithSnapshotCache && dataRowCache != null && dataRowCache.getEventManager() != null) {
             // setting itself as non-blocking listener,
@@ -293,9 +294,9 @@ public class DataContextObjectStore implements ObjectStore {
             }
         }
 
-        // reset changes ... using new HashMap to allow event listeners to analyze the
+        // reset changes ... using a new map to allow event listeners to analyze the
         // original changes map after the rollback
-        this.changes = new HashMap<>();
+        this.changes = new LinkedHashMap<>();
     }
 
     /**
@@ -362,7 +363,7 @@ public class DataContextObjectStore implements ObjectStore {
 
         // create new instance of changes map so that event listeners who stored the
         // original diff don't get affected
-        this.changes = new HashMap<>();
+        this.changes = new LinkedHashMap<>();
     }
 
     /**

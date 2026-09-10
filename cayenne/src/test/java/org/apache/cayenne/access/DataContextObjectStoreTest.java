@@ -19,21 +19,33 @@
 
 package org.apache.cayenne.access;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import org.apache.cayenne.DataChannel;
+import org.apache.cayenne.ObjectContext;
 import org.apache.cayenne.ObjectId;
 import org.apache.cayenne.PersistenceState;
 import org.apache.cayenne.Persistent;
+import org.apache.cayenne.map.EntityResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class DataContextObjectStoreTest {
+
+    /**
+     * Enough registered objects that a hash-ordered map is overwhelmingly unlikely to iterate them in
+     * registration order by coincidence.
+     */
+    private static final int ORDER_PROBE_SIZE = 32;
 
     private DataContextObjectStore objectStore;
 
@@ -70,4 +82,38 @@ public class DataContextObjectStoreTest {
         verify(object, times(0)).setObjectId(null);
         verify(object).setObjectContext(null);
         verify(object).setPersistenceState(PersistenceState.TRANSIENT);    }
+
+    /**
+     * The flush walks object diffs in the order {@code changes} yields them, so that order decides which
+     * object's walk observes the other's bookkeeping. Registration order is the only order that is a property
+     * of the objects being flushed rather than of their {@code ObjectId} hashes.
+     */
+    @Test
+    public void changesAreIteratedInRegistrationOrder() {
+
+        List<ObjectId> registered = new ArrayList<>(ORDER_PROBE_SIZE);
+        for (int i = 0; i < ORDER_PROBE_SIZE; i++) {
+            ObjectId id = ObjectId.of("E1", "ID", i);
+            objectStore.registerObject(id, newObject(id));
+            objectStore.registerDiff(id, null);
+            registered.add(id);
+        }
+
+        assertEquals(registered, new ArrayList<>(objectStore.getChangesByObjectId().keySet()),
+                "diffs must be walked in registration order, not in ObjectId hash order");
+    }
+
+    private Persistent newObject(ObjectId id) {
+        EntityResolver entityResolver = mock(EntityResolver.class);
+        ObjectContext context = mock(ObjectContext.class);
+        when(context.getEntityResolver()).thenReturn(entityResolver);
+
+        Persistent object = mock(Persistent.class);
+        when(object.getObjectId()).thenReturn(id);
+        when(object.getObjectContext()).thenReturn(context);
+        // NEW keeps ObjectDiff's constructor out of the optimistic-locking snapshot branch, which would
+        // need a mapped ObjEntity behind the resolver
+        when(object.getPersistenceState()).thenReturn(PersistenceState.NEW);
+        return object;
+    }
 }
