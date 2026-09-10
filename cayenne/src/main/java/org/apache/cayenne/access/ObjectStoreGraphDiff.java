@@ -33,6 +33,7 @@ import org.apache.cayenne.validation.ValidationResult;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -60,7 +61,22 @@ public class ObjectStoreGraphDiff implements GraphDiff {
     }
 
     /**
-     * Requires external synchronization on ObjectStore.
+     * Returns the object diffs in the order their objects were first changed, i.e. by the diff id the ObjectStore
+     * assigns at registration. {@link #getChangesByObjectId()} iterates in ObjectId hash order, as it is a concurrent
+     * map for the ObjectStore's lock-free readers. Every walk whose order is observable - validation, which runs user
+     * code, and the flush, where a walk stamps flattened routes onto objects that a later walk reads - uses this order
+     * instead, so that it is a property of the objects being committed rather than of their ObjectId hashes.
+     *
+     * @since 5.0
+     */
+    public List<ObjectDiff> getChangesInRegistrationOrder() {
+        List<ObjectDiff> diffs = new ArrayList<>(getChangesByObjectId().values());
+        diffs.sort(Comparator.comparingInt(ObjectDiff::getDiffId));
+        return diffs;
+    }
+
+    /**
+     * Requires external synchronization on ObjectStore. Validates the changed objects in registration order.
      */
     boolean validateAndCheckNoop() {
         if (getChangesByObjectId().isEmpty()) {
@@ -75,7 +91,7 @@ public class ObjectStoreGraphDiff implements GraphDiff {
 
         Collection<Validating> objectsToValidate = null;
 
-        for (final ObjectDiff diff : getChangesByObjectId().values()) {
+        for (final ObjectDiff diff : getChangesInRegistrationOrder()) {
 
             if (!diff.isNoop()) {
 

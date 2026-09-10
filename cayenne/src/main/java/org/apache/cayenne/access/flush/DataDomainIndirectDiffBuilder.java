@@ -47,8 +47,7 @@ final class DataDomainIndirectDiffBuilder implements GraphChangeHandler {
 
     void processChanges(ObjectStoreGraphDiff allChanges) {
         // extract flattened and indirect changes and remove duplicate changes...
-        allChanges.getChangesByObjectId()
-                .forEach((obj, diff) -> diff.apply(this));
+        allChanges.getChangesInRegistrationOrder().forEach(diff -> diff.apply(this));
     }
 
     Collection<ObjectId> getIndirectModifications() {

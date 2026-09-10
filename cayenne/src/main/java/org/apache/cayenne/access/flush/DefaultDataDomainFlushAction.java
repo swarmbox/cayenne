@@ -46,6 +46,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -110,12 +111,12 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
      * @return collection of {@link DbRowOp}
      */
     protected List<DbRowOp> createDbRowOps(DbRowOpCreator creator, ObjectStoreGraphDiff changes) {
-        Map<ObjectId, ObjectDiff> changesByObjectId = changes.getChangesByObjectId();
-        List<DbRowOp> ops = new ArrayList<>(changesByObjectId.size());
+        List<ObjectDiff> diffs = changes.getChangesInRegistrationOrder();
+        List<DbRowOp> ops = new ArrayList<>(diffs.size());
 
         // ops.addAll() method is slower in this case as it will allocate new array for all values
         //noinspection UseBulkOperation
-        changesByObjectId.forEach((obj, diff) -> creator.createRows(diff).forEach(ops::add));
+        diffs.forEach(diff -> creator.createRows(diff).forEach(ops::add));
 
         return ops;
     }
@@ -134,7 +135,7 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
      * @return collection of ops with merged duplicates
      */
     protected List<DbRowOp> mergeSameObjectIds(List<DbRowOp> dbRowOps) {
-        Map<ObjectId, DbRowOp> index = HashMap.newHashMap(dbRowOps.size());
+        Map<ObjectId, DbRowOp> index = LinkedHashMap.newLinkedHashMap(dbRowOps.size());
         // new EffectiveOpId()
         dbRowOps.forEach(row -> index.merge(OpIdFactory.idForOperation(row.getChangeId()), row, new DbRowOpMerger()));
         // reuse list
