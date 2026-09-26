@@ -1607,4 +1607,70 @@ public class VerticalInheritanceIT {
 		assertEquals("Two", ivSub2Fetched.getSub2Name());
 	}
 
+	@Test
+	public void updateSub1AttributeInAnotherContextAfterInsert() throws Exception {
+		TableHelper ivSub1Table = env.table("IV_SUB1", "ID", "SUB1_NAME");
+
+		IvSub1 sub1 = env.context().newObject(IvSub1.class);
+		sub1.setName("root");
+		sub1.setSub1Name("before");
+		env.context().commitChanges();
+
+		// resolved from the snapshot the insert published to the shared cache, with no query of its own
+		ObjectContext other = runtime.newContext();
+		IvSub1 hollow = other.localObject(sub1);
+		hollow.setSub1Name("after");
+		other.commitChanges();
+
+		assertEquals(1, ivSub1Table.getRowCount());
+		assertEquals("after", ivSub1Table.select()[1]);
+	}
+
+	@Test
+	public void updateSub1Sub1AttributesInAnotherContextAfterInsert() throws Exception {
+		TableHelper ivSub1Table = env.table("IV_SUB1", "ID", "SUB1_NAME");
+		TableHelper ivSub1Sub1Table = env.table("IV_SUB1_SUB1", "ID", "SUB1_SUB1_NAME");
+
+		IvSub1Sub1 sub1Sub1 = env.context().newObject(IvSub1Sub1.class);
+		sub1Sub1.setName("root");
+		sub1Sub1.setSub1Name("before1");
+		sub1Sub1.setSub1Sub1Name("before1Sub1");
+		env.context().commitChanges();
+
+		// resolved from the snapshot the insert published to the shared cache, with no query of its own
+		ObjectContext other = runtime.newContext();
+		IvSub1Sub1 hollow = other.localObject(sub1Sub1);
+		hollow.setSub1Name("after1");
+		hollow.setSub1Sub1Name("after1Sub1");
+		other.commitChanges();
+
+		assertEquals(1, ivSub1Table.getRowCount());
+		assertEquals("after1", ivSub1Table.select()[1]);
+		assertEquals(1, ivSub1Sub1Table.getRowCount());
+		assertEquals("after1Sub1", ivSub1Sub1Table.select()[1]);
+	}
+
+	@Test
+	public void updateFaultedSubAttributeInAnotherContextAfterInsert() throws Exception {
+		TableHelper ivImplTable = env.table("IV_IMPL", "ID", "ATTR1");
+
+		IvOther owner = env.context().newObject(IvOther.class);
+		owner.setName("owner");
+
+		IvImpl impl = env.context().newObject(IvImpl.class);
+		impl.setName("impl");
+		impl.setAttr1("before");
+		owner.setBase(impl);
+		env.context().commitChanges();
+
+		// resolved from the snapshot the insert published to the shared cache, with no query of its own
+		ObjectContext other = runtime.newContext();
+		IvImpl hollow = (IvImpl) other.localObject(owner).getBase();
+		hollow.setAttr1("after");
+		other.commitChanges();
+
+		assertEquals(1, ivImplTable.getRowCount());
+		assertEquals("after", ivImplTable.select()[1]);
+	}
+
 }
