@@ -452,6 +452,44 @@ public class DataContextFlattenedAttributesIT {
         }
     }
 
+    @Test
+    public void updateArtistNameInAnotherContextAfterInsert() throws Exception {
+        CompoundPainting painting = context.newObject(CompoundPainting.class);
+        painting.setArtistName("A1");
+        painting.setEstimatedPrice(BigDecimal.valueOf(1));
+        painting.setGalleryName("G1");
+        painting.setPaintingTitle("P1");
+        painting.setTextReview("T1");
+        context.commitChanges();
+
+        // resolved from the snapshot the insert published to the shared cache, with no query of its own
+        CompoundPainting hollow = runtime.newContext().localObject(painting);
+        hollow.setArtistName("AX1");
+        hollow.getObjectContext().commitChanges();
+
+        assertEquals(1, tArtist.getRowCount());
+        assertEquals("AX1", tArtist.getString("ARTIST_NAME").trim());
+    }
+
+    @Test
+    public void updateTextReviewInAnotherContextAfterInsert() throws Exception {
+        CompoundPainting painting = context.newObject(CompoundPainting.class);
+        painting.setArtistName("A1");
+        painting.setEstimatedPrice(BigDecimal.valueOf(1));
+        painting.setGalleryName("G1");
+        painting.setPaintingTitle("P1");
+        painting.setTextReview("T1");
+        context.commitChanges();
+
+        // resolved from the snapshot the insert published to the shared cache, with no query of its own
+        CompoundPainting hollow = runtime.newContext().localObject(painting);
+        hollow.setTextReview("TX1");
+        hollow.getObjectContext().commitChanges();
+
+        assertEquals(1, tPaintingInfo.getRowCount());
+        assertEquals("TX1", tPaintingInfo.getString("TEXT_REVIEW"));
+    }
+
     /**
      * Guarantee initial structure of database via deletion all data inside
      */
