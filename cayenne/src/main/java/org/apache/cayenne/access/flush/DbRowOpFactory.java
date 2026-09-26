@@ -183,7 +183,8 @@ class DbRowOpFactory implements DbRowOpCreator {
      * Hands every flattened path discovered by this flush to the {@link ObjectStore}. Called once the flush has
      * executed its queries, so that a flush failing before that point leaves nothing behind.
      * <p>
-     * The staged id is promoted as is, since its {@code getIdSnapshot()} already resolves to the row's real key.
+     * Paths are keyed on the owner's permanent id, the id its snapshot is taken under. The staged id is promoted
+     * as is, since its {@code getIdSnapshot()} already resolves to the row's real key.
      * <p>
      * Note this is keyed on the queries having run, not on the transaction having committed: a failure raised
      * at COMMIT - a {@code DEFERRABLE INITIALLY DEFERRED} constraint, say - still promotes. That window is not
@@ -192,8 +193,15 @@ class DbRowOpFactory implements DbRowOpCreator {
      */
     void promoteFlattenedPaths() {
         flattenedPaths.forEach((id, paths) -> paths.forEach((path, flattenedId)
-                -> store.markFlattenedPath(id, path, flattenedId)));
+                -> store.markFlattenedPath(permanent(id), path, flattenedId)));
         flattenedPaths.clear();
+    }
+
+    private static ObjectId permanent(ObjectId id) {
+        if(id.isTemporary() && id.isReplacementIdAttached()) {
+            return id.createReplacementId();
+        }
+        return id;
     }
 
     ObjectDiff getDiff() {
