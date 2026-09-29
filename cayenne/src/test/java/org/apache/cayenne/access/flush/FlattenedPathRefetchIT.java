@@ -40,6 +40,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.sql.SQLException;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,9 +52,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A context that inserted the join-table row of a to-one flattened through a join table, FlattenedTest5.toFT1
  * ("complexJoin2.toFT1"), tracks that row's key. A fetch of the owner never selects the key, as a query of
  * FlattenedTest5 does not join COMPLEX_JOIN2, so it says nothing about the row and must leave the tracked key alone,
- * also when it fetches the owner as the child of a prefetch, FlattenedTest1.ft5Array. Without a delete rule nothing
- * clears the relationship when the owner is deleted, and only the tracked key gets the join row deleted with it (see
- * RootRowOpProcessor.visitDelete).
+ * also when it fetches the owner as the child of a prefetch, FlattenedTest1.ft5Array, or as the root of a
+ * query. The owner's later re-point and clear are then still changes to that one row. Without a delete rule
+ * nothing clears the relationship when the owner is deleted, and the owner's delete deletes the join row by its
+ * tracked key (see RootRowOpProcessor.visitDelete).
  */
 public class FlattenedPathRefetchIT {
 
@@ -86,7 +89,7 @@ public class FlattenedPathRefetchIT {
 
     @BeforeEach
     public void createTestData() throws SQLException {
-        env.table("FLATTENED_TEST_1", "FT1_ID", "NAME").insert(1, "ft1-1");
+        env.table("FLATTENED_TEST_1", "FT1_ID", "NAME").insert(1, "ft1-1").insert(2, "ft1-2");
         env.table("FLATTENED_TEST_5", "FT5_ID", "NAME").insert(1, "ft5-1").insert(2, "ft5-2");
 
         // FlattenedTest5 #2 shares the target, so FlattenedTest5 #1 is fetched with another child
@@ -131,6 +134,55 @@ public class FlattenedPathRefetchIT {
         }
     }
 
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(Fetch.class)
+    public void repointAndClearAfterChildFetch(Fetch fetch) throws SQLException {
+        DataContext context = newContext();
+        FlattenedTest5 owner = insertJoinRow(context);
+        fetchAsChild(context, fetch);
+        repointAndClear(context, owner);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(Fetch.class)
+    public void repointAndClearAfterOtherContextChildFetch(Fetch fetch) throws SQLException {
+        DataContext context = newContext();
+        FlattenedTest5 owner = insertJoinRow(context);
+        fetchAsChild(newContext(), fetch);
+        repointAndClear(context, owner);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(Fetch.class)
+    public void repointAndClearAfterRootFetch(Fetch fetch) throws SQLException {
+        DataContext context = newContext();
+        FlattenedTest5 owner = insertJoinRow(context);
+        fetchAsRoot(context, fetch);
+        repointAndClear(context, owner);
+    }
+
+    /**
+     * Points FlattenedTest5 #1 at FlattenedTest1 #2, then at nothing, checking that the first commit updates
+     * the join row and the second deletes it.
+     */
+    private static void repointAndClear(DataContext context, FlattenedTest5 owner) throws SQLException {
+        int joinRowPk = joinRows(1).iterator().next().pk();
+
+        owner.setToFT1(Cayenne.objectForPK(context, FlattenedTest1.class, 2));
+        commit(context);
+        assertEquals(1, SQL_LOGGER.statements("UPDATE", "COMPLEX_JOIN2"), SQL_LOGGER.updates().toString());
+        assertEquals(0, SQL_LOGGER.statements("INSERT INTO", "COMPLEX_JOIN2"), SQL_LOGGER.updates().toString());
+        assertEquals(0, SQL_LOGGER.statements("DELETE FROM", "COMPLEX_JOIN2"), SQL_LOGGER.updates().toString());
+        assertEquals(Set.of(new JoinRow(joinRowPk, 1, 2)), joinRows(1));
+
+        owner.setToFT1(null);
+        commit(context);
+        assertEquals(1, SQL_LOGGER.statements("DELETE FROM", "COMPLEX_JOIN2"), SQL_LOGGER.updates().toString());
+        assertEquals(0, SQL_LOGGER.statements("INSERT INTO", "COMPLEX_JOIN2"), SQL_LOGGER.updates().toString());
+        assertEquals(Set.of(), joinRows(1));
+        assertEquals(Set.of(new JoinRow(20, 2, 1)), joinRows(2));
+    }
+
     /**
      * Links FlattenedTest5 #1 to FlattenedTest1 #1, which inserts a join row the context then tracks.
      */
@@ -153,11 +205,47 @@ public class FlattenedPathRefetchIT {
                 "FlattenedTest5 #1 not fetched");
     }
 
+    /**
+     * Fetches FlattenedTest5 #1 and its toFT1.
+     */
+    private static void fetchAsRoot(DataContext context, Fetch fetch) {
+        ObjectSelect<FlattenedTest5> query = ObjectSelect.query(FlattenedTest5.class)
+                .where(FlattenedTest5.FT5_ID_PK_PROPERTY.eq(1));
+        FlattenedTest5 owner = fetch.prefetch(query, FlattenedTest5.TO_FT1).selectOne(context);
+        assertEquals(1, Cayenne.intPKForObject(owner.getToFT1()));
+    }
+
     private static ObjectId joinRowId(DataContext context, FlattenedTest5 owner) {
         return context.getObjectStore().getFlattenedId(owner.getObjectId(), JOIN_ROW);
     }
 
     private static DataContext newContext() {
         return (DataContext) env.runtime().newContext();
+    }
+
+    private static void commit(DataContext context) {
+        SQL_LOGGER.clear();
+        context.commitChanges();
+    }
+
+    /**
+     * A join row of COMPLEX_JOIN2.
+     */
+    private record JoinRow(int pk, int ft5, int ft1) {
+    }
+
+    /**
+     * Returns the join rows of a FlattenedTest5.
+     */
+    private static Set<JoinRow> joinRows(int ft5) throws SQLException {
+        Set<JoinRow> rows = new HashSet<>();
+        for (Object[] row : env.table("COMPLEX_JOIN2", "PK", "FT5_FK", "FT1_FK").selectAll()) {
+            JoinRow joinRow = new JoinRow(((Number) row[0]).intValue(), ((Number) row[1]).intValue(),
+                    ((Number) row[2]).intValue());
+            if (joinRow.ft5() == ft5) {
+                rows.add(joinRow);
+            }
+        }
+        return rows;
     }
 }

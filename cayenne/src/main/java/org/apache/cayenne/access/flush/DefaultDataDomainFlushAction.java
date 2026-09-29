@@ -295,7 +295,9 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
 
         @Override
         public Void visitUpdate(UpdateDbRowOp dbRow) {
-            if(dbRow.getChangeId().isTemporary() && !dbRow.getChangeId().isReplacementIdAttached()) {
+            // an update without a key is no phantom when its qualifier addresses the row by other columns
+            if(dbRow.getChangeId().isTemporary() && !dbRow.getChangeId().isReplacementIdAttached()
+                    && dbRow.getQualifier().getSnapshot().isEmpty()) {
                 dbRow.getValues().clear();
             }
             return null;

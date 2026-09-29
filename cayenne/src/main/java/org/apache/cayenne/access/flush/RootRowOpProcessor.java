@@ -19,7 +19,12 @@
 
 package org.apache.cayenne.access.flush;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.cayenne.CayenneRuntimeException;
 import org.apache.cayenne.ObjectId;
@@ -29,10 +34,15 @@ import org.apache.cayenne.access.flush.operation.DbRowOpVisitor;
 import org.apache.cayenne.access.flush.operation.DeleteDbRowOp;
 import org.apache.cayenne.access.flush.operation.InsertDbRowOp;
 import org.apache.cayenne.access.flush.operation.UpdateDbRowOp;
+import org.apache.cayenne.exp.DbPathExp;
 import org.apache.cayenne.exp.path.CayennePath;
 import org.apache.cayenne.graph.GraphChangeHandler;
+import org.apache.cayenne.map.DbEntity;
+import org.apache.cayenne.map.DbRelationship;
 import org.apache.cayenne.map.ObjEntity;
+import org.apache.cayenne.map.ObjRelationship;
 import org.apache.cayenne.reflect.AdditionalDbEntityDescriptor;
+import org.apache.cayenne.reflect.ArcProperty;
 import org.apache.cayenne.reflect.ClassDescriptor;
 
 /**
@@ -92,10 +102,90 @@ class RootRowOpProcessor implements DbRowOpVisitor<Void> {
                 dbRowOpFactory.getOrCreate(addEntity.getDbEntity(), id, DbRowOpType.DELETE);
             }
         });
+        deleteJoinRowsWithOwner(dbRow.getChangeId(), flattenedPathIdMap.keySet());
+        deleteToManyJoinRowsWithOwner(dbRow.getChangeId());
 
         if (entity.getDeclaredLockType() == ObjEntity.LOCK_TYPE_OPTIMISTIC) {
             new OptimisticLockQualifierBuilder(dbRow, diff).build(descriptor);
         }
         return null;
+    }
+
+    /**
+     * Deletes the join rows of the owner's to-ones through a join table. Such a row refers to the owner by a
+     * plain foreign key, so it cannot outlive it, whatever the delete rule and whatever this flush did to the
+     * arc: {@link ArcValuesCreationHandler} writes no arc change for the join row of a deleted owner.
+     * <p>
+     * The loop above has already deleted the rows whose key the flush tracks, by that key. The others, whose
+     * key a fetch never reads, are deleted here by their foreign key to the owner. Either way the path stops
+     * naming the row.
+     */
+    private void deleteJoinRowsWithOwner(ObjectId ownerId, Set<CayennePath> trackedPaths) {
+        ClassDescriptor descriptor = dbRowOpFactory.getDescriptor();
+        // a join row that two of the owner's to-ones pass through is still deleted once
+        Set<CayennePath> deletedPaths = new HashSet<>(trackedPaths);
+
+        for (ObjRelationship relationship : descriptor.getEntity().getRelationships()) {
+            List<DbRelationship> dbPath = relationship.getDbRelationships();
+            if (ArcValuesCreationHandler.isJoinRowDeletedWithOwner(descriptor, dbPath)) {
+                CayennePath path = ArcValuesCreationHandler.joinRowPath(dbPath);
+                boolean alreadyDeleted = deletedPaths.contains(path);
+                if (!alreadyDeleted) {
+                    deleteByForeignKeyToOwner(dbPath.getFirst(), ownerId);
+                    deletedPaths.add(path);
+                }
+                dbRowOpFactory.forgetFlattenedPath(ownerId, path);
+            }
+        }
+    }
+
+    /**
+     * Deletes the join rows of the owner's to-manys through a join table, by their foreign key to the
+     * owner, once per join table. Like a to-one's join row, such a row cannot outlive the owner. The delete
+     * rules remove it only as an arc the context knows of, and with no rule, or a CASCADE whose targets
+     * leave their arc, nothing does. Deleting by the foreign key needs no fetch of the rows.
+     * <p>
+     * A to-many the context has read and holds empty is left alone: the removal of each arc it held, by a
+     * NULLIFY rule or by the application, already deletes that arc's row.
+     */
+    private void deleteToManyJoinRowsWithOwner(ObjectId ownerId) {
+        // two to-manys that enter the same join table by the same foreign key delete its rows once
+        Set<DbRelationship> hopsToJoinRows = new LinkedHashSet<>();
+        for (ObjRelationship relationship : dbRowOpFactory.getDescriptor().getEntity().getRelationships()) {
+            List<DbRelationship> dbPath = relationship.getDbRelationships();
+            if (ArcValuesCreationHandler.isJoinTableToMany(dbPath) && mayStillHaveJoinRows(relationship)) {
+                hopsToJoinRows.add(dbPath.getFirst());
+            }
+        }
+        for (DbRelationship toJoinRows : hopsToJoinRows) {
+            deleteByForeignKeyToOwner(toJoinRows, ownerId);
+        }
+    }
+
+    /**
+     * Whether the owner may still have rows in the to-many's join table, which is so unless the context has
+     * read the to-many and holds it empty.
+     */
+    private boolean mayStillHaveJoinRows(ObjRelationship toMany) {
+        ArcProperty property = (ArcProperty) dbRowOpFactory.getDescriptor().getProperty(toMany.getName());
+        Object targets = property.readPropertyDirectly(dbRowOpFactory.getObject());
+        boolean readAndEmpty = !property.isFaultValue(targets) && isEmptyCollection(targets);
+        return !readAndEmpty;
+    }
+
+    private static boolean isEmptyCollection(Object targets) {
+        return switch (targets) {
+            case Collection<?> collection -> collection.isEmpty();
+            case Map<?, ?> map -> map.isEmpty();
+            case null, default -> false;
+        };
+    }
+
+    private void deleteByForeignKeyToOwner(DbRelationship toJoinRow, ObjectId ownerId) {
+        DbEntity joinTable = toJoinRow.getTargetEntity();
+        // a temporary id that never gets a key: the foreign-key qualifier, not the id, finds the row
+        ObjectId keylessId = ObjectId.of(DbPathExp.DB_PREFIX + joinTable.getName());
+        DeleteDbRowOp delete = dbRowOpFactory.getOrCreate(joinTable, keylessId, DbRowOpType.DELETE);
+        ArcValuesCreationHandler.qualifyByForeignKeyToSource(delete, toJoinRow, ownerId);
     }
 }
