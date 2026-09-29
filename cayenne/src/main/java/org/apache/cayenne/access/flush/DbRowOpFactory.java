@@ -36,6 +36,7 @@ import org.apache.cayenne.reflect.ClassDescriptor;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -53,6 +54,7 @@ class DbRowOpFactory implements DbRowOpCreator {
     private final Set<ArcTarget> declaredArcs;
     private final Map<ObjectId, DbRowOp> dbRows;
     private final Map<ObjectId, Map<CayennePath, ObjectId>> flattenedPaths;
+    private final Map<ObjectId, Set<CayennePath>> forgottenPaths;
     private final RootRowOpProcessor rootRowOpProcessor;
     private final DeleteDbRowOpFactory deleteDbRowOpFactory;
 
@@ -70,6 +72,7 @@ class DbRowOpFactory implements DbRowOpCreator {
         this.store = store;
         this.dbRows = new HashMap<>(4);
         this.flattenedPaths = new HashMap<>(4);
+        this.forgottenPaths = new HashMap<>(4);
         this.processedArcs = processedArcs;
         this.declaredArcs = declaredArcs;
         this.rootRowOpProcessor = new RootRowOpProcessor(this);
@@ -161,6 +164,18 @@ class DbRowOpFactory implements DbRowOpCreator {
         flattenedPaths.computeIfAbsent(id, i -> new HashMap<>(4)).put(path, flattenedId);
     }
 
+    /**
+     * Records that this flush deletes the flattened row at the given path, so that the path stops naming it.
+     * Like {@link #markFlattenedPath}, the {@link ObjectStore} is told only once the queries have executed.
+     */
+    void forgetFlattenedPath(ObjectId id, CayennePath path) {
+        Map<CayennePath, ObjectId> flushLocal = flattenedPaths.get(id);
+        if (flushLocal != null) {
+            flushLocal.remove(path);
+        }
+        forgottenPaths.computeIfAbsent(id, i -> new HashSet<>(4)).add(path);
+    }
+
     Collection<ObjectId> getFlattenedIds(ObjectId id) {
         return getFlattenedPathIdMap(id).values();
     }
@@ -193,10 +208,19 @@ class DbRowOpFactory implements DbRowOpCreator {
      * at COMMIT - a {@code DEFERRABLE INITIALLY DEFERRED} constraint, say - still promotes. That window is not
      * specific to flattened paths, since {@code postprocess} likewise flips objects to COMMITTED before the
      * transaction ends.
+     * <p>
+     * Forgotten paths are applied first, so that a row deleted and re-created in one flush stays tracked. A
+     * temporary id that never acquired a key is not promoted: it names a row the flush addressed by other
+     * columns, and a later flush could not address it by that id.
      */
     void promoteFlattenedPaths() {
-        flattenedPaths.forEach((id, paths) -> paths.forEach((path, flattenedId)
-                -> store.markFlattenedPath(permanent(id), path, flattenedId)));
+        forgottenPaths.forEach((id, paths) -> paths.forEach(path -> store.forgetFlattenedPath(permanent(id), path)));
+        forgottenPaths.clear();
+        flattenedPaths.forEach((id, paths) -> paths.forEach((path, flattenedId) -> {
+            if (!flattenedId.isTemporary() || flattenedId.isReplacementIdAttached()) {
+                store.markFlattenedPath(permanent(id), path, flattenedId);
+            }
+        }));
         flattenedPaths.clear();
     }
 

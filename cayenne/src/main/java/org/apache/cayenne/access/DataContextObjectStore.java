@@ -809,7 +809,7 @@ public class DataContextObjectStore implements ObjectStore {
 
     /**
      * Discards the tracked flattened row for a single path of a single object, for use when a fetch has shown
-     * that the row it named is no longer there. Counterpart to
+     * that the row it named is no longer there, or when a flush has deleted it. Counterpart to
      * {@link #markFlattenedPath(ObjectId, CayennePath, ObjectId)}, which only ever adds; without this the
      * tracking could not be corrected by re-reading the database, and an id left over from an earlier fetch or
      * from a flush whose transaction did not survive would keep turning the child row's insert into an update
@@ -817,7 +817,7 @@ public class DataContextObjectStore implements ObjectStore {
      *
      * @since 5.0
      */
-    void forgetFlattenedPath(ObjectId objectId, CayennePath path) {
+    public void forgetFlattenedPath(ObjectId objectId, CayennePath path) {
         if(trackedFlattenedPaths == null) {
             return;
         }

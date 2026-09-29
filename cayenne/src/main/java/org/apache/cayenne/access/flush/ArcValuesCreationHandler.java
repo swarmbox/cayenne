@@ -46,6 +46,7 @@ import org.apache.cayenne.map.ObjEntity;
 import org.apache.cayenne.map.ObjRelationship;
 import org.apache.cayenne.reflect.AdditionalDbEntityDescriptor;
 import org.apache.cayenne.reflect.ClassDescriptor;
+import org.apache.cayenne.reflect.PropertyDescriptor;
 import org.apache.cayenne.util.CayenneMapEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,7 +121,10 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
 
     FlattenedPathProcessingResult processFlattenedPath(ObjectId id, ObjectId finalTargetId,
             ArcTarget arcTarget, DbEntity entity, CayennePath dbPath, boolean add) {
-        if(shouldSkipFlattenedOp(id, finalTargetId, arcTarget)) {
+        List<CayenneMapEntry> entries = new ArrayList<>();
+        entity.resolvePathComponents(dbPath).forEachRemaining(entries::add);
+
+        if(shouldSkipFlattenedOp(id, finalTargetId, arcTarget, entries)) {
             return flattenedResultNotProcessed();
         }
 
@@ -128,9 +132,6 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
 
         ObjectId srcId = id;
         ObjectId targetId = null;
-
-        List<CayenneMapEntry> entries = new ArrayList<>();
-        entity.resolvePathComponents(dbPath).forEachRemaining(entries::add);
 
         for(int i = 0; i < entries.size(); i++) {
             CayenneMapEntry entry = entries.get(i);
@@ -185,6 +186,18 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
                             type = DbRowOpType.DELETE;
                         }
                         factory.getOrCreate(target, targetId, type);
+                    } else if(!add && finalTargetId != null && referencesNeighboursByForeignKey(entries, i)) {
+                        if(isRemovalHalfOfRepoint(id, arcTarget)) {
+                            // the row's key is unknown, so it is found by its foreign key to the source
+                            UpdateDbRowOp update = factory.getOrCreate(target, targetId, DbRowOpType.UPDATE);
+                            for(DbJoin join : relationship.getJoins()) {
+                                update.getQualifier().addAdditionalQualifier(join.getTarget(),
+                                        ObjectIdValueSupplier.getFor(srcId, join.getSourceName()));
+                            }
+                        } else {
+                            factory.getOrCreate(target, targetId, DbRowOpType.DELETE);
+                            factory.forgetFlattenedPath(id, flattenedPath);
+                        }
                     } else {
                         if (
                             add &&
@@ -218,6 +231,13 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
                             markDerivedRowOnOwner(finalTargetId, entries, i, derivedTargetId);
                         } else {
                             type = DbRowOpType.UPDATE;
+                        }
+                    } else if(finalTargetId != null && referencesNeighboursByForeignKey(entries, i)) {
+                        if(isRemovalHalfOfRepoint(id, arcTarget)) {
+                            type = DbRowOpType.UPDATE;
+                        } else {
+                            type = DbRowOpType.DELETE;
+                            factory.forgetFlattenedPath(id, flattenedPath);
                         }
                     } else if(defaultType == DbRowOpType.DELETE && hasSharedPrimaryKeyNext(entries, i)) {
                         // Vertical-inheritance case (CAY-2890): an existing intermediate row whose
@@ -386,6 +406,45 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
     }
 
     /**
+     * Whether the intermediate at hop {@code i} is a join table referring to both of its neighbours by a plain
+     * foreign key, so that the arc lives entirely in that row's foreign keys.
+     */
+    private static boolean referencesNeighboursByForeignKey(List<CayenneMapEntry> entries, int i) {
+        if(i + 1 >= entries.size()
+                || !(entries.get(i) instanceof DbRelationship in)
+                || !(entries.get(i + 1) instanceof DbRelationship out)) {
+            return false;
+        }
+        DbRelationship toSource = in.getReverseRelationship();
+        return toSource != null && isPlainForeignKey(toSource) && isPlainForeignKey(out);
+    }
+
+    private static boolean isPlainForeignKey(DbRelationship relationship) {
+        return !relationship.isToMany() && relationship.isToPK() && !relationship.isFromPK();
+    }
+
+    /**
+     * Whether this arc removal is half of a re-point, the same diff also declaring the arc's creation to the value
+     * it holds now. The diff's arc snapshot cannot answer this, since it records the target of a removal too.
+     */
+    private boolean isRemovalHalfOfRepoint(ObjectId id, ArcTarget arcTarget) {
+        ObjectId current = currentArcValue(arcTarget.getArcId().getForwardArc());
+        return current != null
+                && factory.getDeclaredArcs().contains(new ArcTarget(id, current, arcTarget.getArcId(), false));
+    }
+
+    private ObjectId currentArcValue(String arc) {
+        PropertyDescriptor property = factory.getDescriptor().getProperty(arc);
+        if(property == null) {
+            return null;
+        }
+        if(property.readPropertyDirectly(factory.getObject()) instanceof Persistent target) {
+            return target.getObjectId();
+        }
+        return null;
+    }
+
+    /**
      * Derives the id of an intermediate row from the arc's final target, the rows being joined on their full
      * shared primary key along every remaining segment of the path. Returns null when the key cannot be read
      * off the target, leaving the caller to fall back to a tracked id or to invent a temporary one.
@@ -504,15 +563,30 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
      * {@code applySimplePropertyChanges}, so two NEW objects joined by a two-sided arc are both routeless when
      * the first of them is evaluated; on membership alone both would skip and the write would vanish. That is
      * the case {@code FlattenedArcDeferralIT.twoSidedArcBetweenTwoNewObjectsWritesItsForeignKey} guards.
+     * <p>
+     * Ahead of the tie-break, an arc whose two ends enter the path through hops of different cardinality is
+     * owned by its to-one end whenever that end declared it: only the to-one end sees the whole transition and
+     * can address the row by its own key, while the to-many end sees a membership change. The to-one end never
+     * defers, so mutual deferral stays impossible.
      */
-    private boolean shouldSkipFlattenedOp(ObjectId id, ObjectId finalTargetId, ArcTarget arcTarget) {
+    private boolean shouldSkipFlattenedOp(ObjectId id, ObjectId finalTargetId, ArcTarget arcTarget,
+                                          List<CayenneMapEntry> entries) {
+        if(finalTargetId == null || arcTarget == null) {
+            return false;
+        }
+        boolean reverseDeclared = factory.getDeclaredArcs().contains(arcTarget.getReversed());
+        if(!entries.isEmpty()
+                && entries.get(0) instanceof DbRelationship entry
+                && entries.get(entries.size() - 1) instanceof DbRelationship last
+                && last.getReverseRelationship() instanceof DbRelationship otherEntry
+                && entry.isToMany() != otherEntry.isToMany()) {
+            return entry.isToMany() && reverseDeclared;
+        }
         // as we get two sides of the relationship processed,
         // check if we got more information for a reverse operation
-        return finalTargetId != null
-                && factory.getFlattenedIds(id).isEmpty()
+        return factory.getFlattenedIds(id).isEmpty()
                 && !factory.getFlattenedIds(finalTargetId).isEmpty()
-                && arcTarget != null
-                && factory.getDeclaredArcs().contains(arcTarget.getReversed());
+                && reverseDeclared;
     }
 
     private boolean shouldProcessAsAddition(DbRelationship relationship, boolean add) {
