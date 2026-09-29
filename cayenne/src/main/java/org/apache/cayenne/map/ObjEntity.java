@@ -24,6 +24,7 @@ import org.apache.cayenne.GenericPersistentObject;
 import org.apache.cayenne.project.ProjectNode;
 import org.apache.cayenne.project.ProjectNodeVisitor;
 import org.apache.cayenne.dba.TypesMapping;
+import org.apache.cayenne.exp.DbIdPathExp;
 import org.apache.cayenne.exp.Expression;
 import org.apache.cayenne.exp.ExpressionFactory;
 import org.apache.cayenne.exp.path.CayennePath;
@@ -892,6 +893,13 @@ public class ObjEntity extends Entity<ObjEntity, ObjAttribute, ObjRelationship> 
                             "entity has more than one PK. Match by id map or ObjectId instead.", getName());
                 }
                 return ExpressionFactory.dbPathExp(pks.iterator().next().getName());
+            }
+
+            if (expression instanceof DbIdPathExp idPathExp) {
+                // a dbid path is an obj path to an entity plus one of its PK column names; resolve it to the
+                // DB path of that column, so it can be rebased like any other path
+                CayennePath idPath = idPathExp.getExpandedPath();
+                return ExpressionFactory.dbPathExp(toDbPath(idPath.parent()).dot(idPath.last()));
             }
 
             if (!(expression instanceof ObjPathExp pathExp)) {
