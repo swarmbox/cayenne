@@ -40,6 +40,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class DataContextDisjointByIdPrefetchIT {
@@ -251,4 +252,39 @@ public class DataContextDisjointByIdPrefetchIT {
         });
     }
 
+    @Test
+    public void manyToOneWithNullFk() throws Exception {
+        tArtist.insert(1, "X1");
+        tArtist.insert(2, "X2");
+        tPainting.insert(1, 1, "Y1");
+        tPainting.insert(2, 2, "Y2");
+        tPainting.insert(3, null, "Y3");
+
+        List<Painting> result = ObjectSelect.query(Painting.class)
+                .prefetch(Painting.TO_ARTIST.disjointById())
+                .orderBy(Painting.PAINTING_TITLE.asc())
+                .select(context);
+
+        env.runWithQueriesBlocked(() -> {
+            assertEquals(3, result.size());
+            assertEquals("X1", result.get(0).getToArtist().getArtistName());
+            assertEquals("X2", result.get(1).getToArtist().getArtistName());
+            assertNull(result.get(2).getToArtist());
+        });
+    }
+
+    @Test
+    public void manyToOneAllNullFks() throws Exception {
+        tPainting.insert(1, null, "Y1");
+        tPainting.insert(2, null, "Y2");
+
+        // a null FK matches no target row, so there is nothing to prefetch
+        int queries = env.runWithQueryCounter(() -> {
+            List<Painting> result = ObjectSelect.query(Painting.class)
+                    .prefetch(Painting.TO_ARTIST.disjointById())
+                    .select(context);
+            assertEquals(2, result.size());
+        });
+        assertEquals(1, queries);
+    }
 }

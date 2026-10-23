@@ -28,6 +28,7 @@ import org.apache.cayenne.exp.path.CayennePath;
 import org.apache.cayenne.map.EntityResolver;
 import org.apache.cayenne.map.ObjRelationship;
 import org.apache.cayenne.reflect.ClassDescriptor;
+import org.apache.cayenne.util.RelationshipPredicates;
 
 /**
  * Preprocessor and router of SelectQuery prefetches.
@@ -95,7 +96,7 @@ class FluentSelectPrefetchRouterAction implements PrefetchProcessor {
         prefetchQuery.where(classDescriptor.getEntity()
                 .translateToRelatedEntity(queryQualifier, prefetchPath));
 
-        if (!relationship.isFromFK()) {
+        if (!relationship.isFromFK() && !RelationshipPredicates.isFkOnChildEntity(relationship)) {
             // setup extra result columns to be able to relate result rows to the parent result objects.
             prefetchQuery.addResultPath(ExpressionFactory.dbPathExp(relationship.getReverseDbRelationshipPath()));
         }
