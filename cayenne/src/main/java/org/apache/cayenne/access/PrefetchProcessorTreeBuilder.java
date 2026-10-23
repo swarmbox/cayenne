@@ -28,6 +28,7 @@ import org.apache.cayenne.query.PrefetchTreeNode;
 import org.apache.cayenne.query.QueryMetadata;
 import org.apache.cayenne.reflect.ArcProperty;
 import org.apache.cayenne.reflect.ClassDescriptor;
+import org.apache.cayenne.util.RelationshipPredicates;
 
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -193,7 +194,8 @@ final class PrefetchProcessorTreeBuilder implements PrefetchProcessor {
             node.setParentAttachmentStrategy(new NoopParentAttachmentStrategy());
         } else if (node.isJointPrefetch()) {
             node.setParentAttachmentStrategy(new StackLookupParentAttachmentStrategy(node));
-        } else if (!node.getIncoming().getRelationship().isFromFK()) {
+        } else if (!node.getIncoming().getRelationship().isFromFK()
+                && !RelationshipPredicates.isFkOnChildEntity(node.getIncoming().getRelationship())) {
             node.setParentAttachmentStrategy(new JoinedIdParentAttachmentStrategy(context.getObjectStore(), node));
         } else {
             node.setParentAttachmentStrategy(new ResultScanParentAttachmentStrategy(node));

@@ -21,9 +21,11 @@ package org.apache.cayenne.access;
 import org.apache.cayenne.DataRowLayout;
 import org.apache.cayenne.DataRow;
 import org.apache.cayenne.Persistent;
+import org.apache.cayenne.exp.path.CayennePath;
 import org.apache.cayenne.map.DbJoin;
 import org.apache.cayenne.map.DbRelationship;
 import org.apache.cayenne.map.ObjRelationship;
+import org.apache.cayenne.util.RelationshipPredicates;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,6 +40,7 @@ class ResultScanParentAttachmentStrategy implements ParentAttachmentStrategy {
     private final PrefetchProcessorNode parentNode;
     private final DbJoin[] joins;
     private final PrefetchProcessorNode node;
+    private final CayennePath prefix;
 
     // the join columns in the child rows and in the parent rows
     private final DataRowLayout.Reader targetReader;
@@ -61,18 +64,25 @@ class ResultScanParentAttachmentStrategy implements ParentAttachmentStrategy {
         ObjRelationship relationship = node.getIncoming().getRelationship();
 
         List<DbRelationship> dbRelationships = relationship.getDbRelationships();
-        if (dbRelationships.size() > 1) {
+        DbRelationship dbRelationship;
+        if (RelationshipPredicates.isFkOnChildEntity(relationship)) {
+            // the FK sits in the sub-entity table, keyed in the parent row under the first hop's name
+            prefix = CayennePath.of(dbRelationships.get(0).getName());
+            dbRelationship = dbRelationships.get(1);
+        } else if (dbRelationships.size() > 1) {
             throw new IllegalArgumentException(
                     "ResultScanParentAttachmentStrategy does not work for flattened relationships");
+        } else {
+            prefix = CayennePath.EMPTY_PATH;
+            dbRelationship = dbRelationships.get(0);
         }
-
-        joins = dbRelationships.get(0).getJoins().toArray(new DbJoin[0]);
+        joins = dbRelationship.getJoins().toArray(new DbJoin[0]);
 
         String[] targetNames = new String[joins.length];
         String[] sourceNames = new String[joins.length];
         for (int i = 0; i < joins.length; i++) {
             targetNames[i] = joins[i].getTargetName();
-            sourceNames[i] = joins[i].getSourceName();
+            sourceNames[i] = prefix.dot(joins[i].getSourceName()).value();
         }
         targetReader = DataRowLayout.of(targetNames).reader();
         sourceReader = DataRowLayout.of(sourceNames).reader();

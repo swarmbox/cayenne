@@ -33,6 +33,7 @@ import org.apache.cayenne.map.DbJoin;
 import org.apache.cayenne.map.DbRelationship;
 import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
+import org.apache.cayenne.map.ObjRelationship;
 
 /**
  * Structural questions about mapped relationships that the query translator, the flush and the prefetch code ask
@@ -170,5 +171,20 @@ public final class RelationshipPredicates {
             }
         }
         return false;
+    }
+
+    /**
+     * Returns true if this is a to-one relationship of a vertically inherited sub-entity whose FK lives in the
+     * sub-entity's own table, i.e. its path is "super table -> sub table (dependent PK) -> target", and the second hop
+     * {@link DbRelationship#isFromFK() is from FK}. Such a relationship is flattened, so
+     * {@link ObjRelationship#isFromFK()} is false, yet the source rows already carry the FK, so prefetches can relate
+     * target rows to their sources without joining back.
+     */
+    public static boolean isFkOnChildEntity(ObjRelationship relationship) {
+        List<DbRelationship> dbRelationships = relationship.getDbRelationships();
+        return relationship.getSourceEntity().getSuperEntityName() != null
+                && dbRelationships.size() == 2
+                && dbRelationships.getFirst().isToDependentPK()
+                && dbRelationships.getLast().isFromFK();
     }
 }

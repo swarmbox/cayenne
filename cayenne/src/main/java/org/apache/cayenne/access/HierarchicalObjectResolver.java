@@ -34,6 +34,7 @@ import org.apache.cayenne.query.PrefetchSelectQuery;
 import org.apache.cayenne.query.PrefetchTreeNode;
 import org.apache.cayenne.query.QueryMetadata;
 import org.apache.cayenne.reflect.ClassDescriptor;
+import org.apache.cayenne.util.RelationshipPredicates;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -165,6 +166,17 @@ class HierarchicalObjectResolver {
             Set<List<Object>> values = new HashSet<>();
 
             for (DataRow dataRow : parentDataRows) {
+                List<Object> joinValues = new ArrayList<>(joins.size());
+                for (int i = 0; i < joins.size(); i++) {
+                    joinValues.add(joinValueReaders.get(i).read(dataRow));
+                }
+
+                // a parent with a null FK has no target row to fetch, and a NULL in the qualifier's IN list is
+                // rejected by some databases (e.g. Derby)
+                if (joinValues.contains(null)) {
+                    continue;
+                }
+
                 // handling too big qualifiers
                 if (currentQuery == null
                         || (maxIdQualifierSize > 0 && qualifiersCount + joins.size() > maxIdQualifierSize)) {
@@ -178,11 +190,6 @@ class HierarchicalObjectResolver {
                     values = new HashSet<>();
                 }
 
-                List<Object> joinValues = new ArrayList<>(joins.size());
-                for (int i = 0; i < joins.size(); i++) {
-                    joinValues.add(joinValueReaders.get(i).read(dataRow));
-                }
-
                 if(values.add(joinValues)) {
                     qualifiersCount += joins.size();
                 }
@@ -193,7 +200,7 @@ class HierarchicalObjectResolver {
             PrefetchTreeNode jointSubtree = node.cloneJointSubtree();
 
             Expression reversePath = null;
-            if (!relationship.isFromFK()) {
+            if (!relationship.isFromFK() && !RelationshipPredicates.isFkOnChildEntity(relationship)) {
                 reversePath = ExpressionFactory.dbPathExp(relationship.getReverseDbRelationshipPath());
             }
 
