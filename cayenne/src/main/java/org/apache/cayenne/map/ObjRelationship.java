@@ -386,6 +386,19 @@ public class ObjRelationship extends Relationship<ObjEntity, ObjAttribute, ObjRe
     }
 
     /**
+     * Returns true if this is a to-one relationship of a vertically inherited sub-entity whose FK lives in the
+     * sub-entity's own table, i.e. its path is "super table -> sub table (dependent PK) -> target PK". The source
+     * rows already carry that FK, so prefetches can relate target rows to their sources without joining back.
+     */
+    public boolean isFkOnChildEntity() {
+        List<DbRelationship> dbRelationships = getDbRelationships();
+        return getSourceEntity().getSuperEntityName() != null
+                && dbRelationships.size() == 2
+                && dbRelationships.get(0).isToDependentPK()
+                && dbRelationships.get(1).isToPK();
+    }
+
+    /**
      * Returns true if underlying DbRelationships point to dependent entity.
      */
     public boolean isToDependentEntity() {

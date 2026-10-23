@@ -193,7 +193,8 @@ final class PrefetchProcessorTreeBuilder implements PrefetchProcessor {
             node.setParentAttachmentStrategy(new NoopParentAttachmentStrategy());
         } else if (node.isJointPrefetch()) {
             node.setParentAttachmentStrategy(new StackLookupParentAttachmentStrategy(node));
-        } else if (node.getIncoming().getRelationship().isSourceIndependentFromTargetChange()) {
+        } else if (node.getIncoming().getRelationship().isSourceIndependentFromTargetChange()
+                && !node.getIncoming().getRelationship().isFkOnChildEntity()) {
             node.setParentAttachmentStrategy(new JoinedIdParentAttachmentStrategy(context.getObjectStore(), node));
         } else {
             node.setParentAttachmentStrategy(new ResultScanParentAttachmentStrategy(node));

@@ -202,7 +202,7 @@ class HierarchicalObjectResolver {
             PrefetchTreeNode jointSubtree = node.cloneJointSubtree();
 
             Expression reversePath = null;
-            if (relationship.isSourceIndependentFromTargetChange()) {
+            if (relationship.isSourceIndependentFromTargetChange() && !relationship.isFkOnChildEntity()) {
                 reversePath = ExpressionFactory.dbPathExp(relationship.getReverseDbRelationshipPath());
             }
 
