@@ -31,6 +31,11 @@ class EnumConverter<T extends Enum<T> & ExtendedEnumeration> implements Converte
     @Override
     public T convert(Object object, Class<T> type) {
 
+        // already a constant, e.g. an "enum:" literal; not to be matched as a DB value or a name
+        if (type.isInstance(object)) {
+            return type.cast(object);
+        }
+
         if (ExtendedEnumeration.class.isAssignableFrom(type)) {
             T[] values = type.getEnumConstants();
             if (values == null) {
