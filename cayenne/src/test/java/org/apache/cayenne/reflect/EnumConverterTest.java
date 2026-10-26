@@ -50,4 +50,13 @@ public class EnumConverterTest {
         assertSame(MockEnum4.B, converter.convert(null, MockEnum4.class));
         assertSame(MockEnum4.C, converter.convert("3", MockEnum4.class));
     }
+
+    @Test
+    public void convertExtendedEnumerationConstant() {
+        EnumConverter converter = new EnumConverter();
+
+        // e.g. an "enum:" literal in an entity qualifier
+        assertSame(MockEnum3.B, converter.convert(MockEnum3.B, MockEnum3.class));
+        assertSame(MockEnum4.C, converter.convert(MockEnum4.C, MockEnum4.class));
+    }
 }
