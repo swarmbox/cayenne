@@ -28,9 +28,14 @@ import org.apache.cayenne.exp.Expression;
 import org.apache.cayenne.exp.ExpressionFactory;
 import org.apache.cayenne.map.DbEntity;
 import org.apache.cayenne.map.DbRelationship;
+import org.apache.cayenne.map.EntityResolver;
 import org.apache.cayenne.map.LifecycleEvent;
 import org.apache.cayenne.map.ObjRelationship;
+import org.apache.cayenne.query.IndirectQuery;
 import org.apache.cayenne.query.ObjectSelect;
+import org.apache.cayenne.query.Query;
+import org.apache.cayenne.query.QueryMetadata;
+import org.apache.cayenne.query.QueryMetadataProxy;
 import org.apache.cayenne.reflect.ArcProperty;
 import org.apache.cayenne.reflect.ClassDescriptor;
 import org.apache.cayenne.reflect.LifecycleCallbackRegistry;
@@ -143,13 +148,36 @@ class DataDomainRelationshipAction {
                 ExpressionFactory.dbPathExp(relationship.getReverseDbRelationshipPath()),
                 sourceId);
 
-        ObjectSelect<Persistent> query = ObjectSelect
+        ObjectSelect<Persistent> select = ObjectSelect
                 .query(Persistent.class, relationship.getTargetEntityName())
                 .where(qualifier);
+
+        // Don't refresh a to-one target: it may already be registered, with resolved relationships and local changes.
+        Query query = relationship.isToMany() ? select : nonRefreshing(select);
 
         @SuppressWarnings("unchecked")
         List<Persistent> related = (List<Persistent>) QueryResults.firstList(domain.onQuery(context, query, false));
         return related;
+    }
+
+    private static Query nonRefreshing(Query select) {
+        return new IndirectQuery() {
+
+            @Override
+            protected Query createReplacementQuery(EntityResolver resolver) {
+                return select;
+            }
+
+            @Override
+            public QueryMetadata getMetaData(EntityResolver resolver) {
+                return new QueryMetadataProxy(super.getMetaData(resolver)) {
+                    @Override
+                    public boolean isRefreshingObjects() {
+                        return false;
+                    }
+                };
+            }
+        };
     }
 
     /**
