@@ -38,9 +38,12 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * DataRows-to-objects converter for a specific ObjEntity.
@@ -56,6 +59,7 @@ class ObjectResolver {
 	Collection<DbAttribute> primaryKey;
 
 	boolean refreshObjects;
+	boolean keepLoadedObjects;
 	DataRowStore cache;
 	DescriptorResolutionStrategy descriptorResolutionStrategy;
 
@@ -64,7 +68,20 @@ class ObjectResolver {
 	private MergePlan plan;
 	private Map<ClassDescriptor, MergePlan> subclassPlans;
 
+	// with keepLoadedObjects, the objects that took their rows from this resolver, which alone publish them to the
+	// shared cache over a cached snapshot
+	private final Set<Persistent> refreshedObjects = Collections.newSetFromMap(new IdentityHashMap<>());
+
 	ObjectResolver(DataContext context, ClassDescriptor descriptor, boolean refresh) {
+		this(context, descriptor, refresh, false);
+	}
+
+	/**
+	 * @param keepLoadedObjects whether a refresh leaves out the objects registered with a state of their own,
+	 *                          COMMITTED, MODIFIED or DELETED, refreshing only the objects that are HOLLOW or new
+	 * @since 5.0
+	 */
+	ObjectResolver(DataContext context, ClassDescriptor descriptor, boolean refresh, boolean keepLoadedObjects) {
 
 		// sanity check
 		if (descriptor == null || descriptor.getEntity() == null) {
@@ -86,6 +103,7 @@ class ObjectResolver {
 		this.context = context;
 		this.cache = context.getObjectStore().getDataRowCache();
 		this.refreshObjects = refresh;
+		this.keepLoadedObjects = keepLoadedObjects;
 		this.descriptor = descriptor;
 
 		this.descriptorResolutionStrategy = descriptor.hasSubclasses() ? new InheritanceStrategy()
@@ -114,7 +132,11 @@ class ObjectResolver {
 		}
 
 		// now deal with snapshots
-		cache.snapshotsUpdatedForObjects(results, rows, refreshObjects);
+		if (keepLoadedObjects) {
+			cache.snapshotsUpdatedForObjects(results, rows, refreshedObjects::contains);
+		} else {
+			cache.snapshotsUpdatedForObjects(results, rows, refreshObjects);
+		}
 		return results;
 	}
 
@@ -238,7 +260,7 @@ class ObjectResolver {
 		case PersistenceState.MODIFIED:
 		case PersistenceState.DELETED:
 			// process the above only if refresh is requested...
-			if (refreshObjects && row.getVersion() >= object.getSnapshotVersion()) {
+			if (refreshObjects && !keepLoadedObjects && row.getVersion() >= object.getSnapshotVersion()) {
 				DataRowUtils.mergeObjectWithSnapshot(context, object, row, plan);
 				object.setSnapshotVersion(row.getVersion());
 			}
@@ -254,6 +276,9 @@ class ObjectResolver {
 			}
 			DataRowUtils.mergeObjectWithSnapshot(context, object, row, plan);
 			object.setSnapshotVersion(row.getVersion());
+			if (keepLoadedObjects) {
+				refreshedObjects.add(object);
+			}
 			break;
 		default:
 			break;

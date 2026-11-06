@@ -28,9 +28,11 @@ import org.apache.cayenne.exp.Expression;
 import org.apache.cayenne.exp.ExpressionFactory;
 import org.apache.cayenne.map.DbEntity;
 import org.apache.cayenne.map.DbRelationship;
+import org.apache.cayenne.map.EntityResolver;
 import org.apache.cayenne.map.LifecycleEvent;
 import org.apache.cayenne.map.ObjRelationship;
 import org.apache.cayenne.query.ObjectSelect;
+import org.apache.cayenne.query.QueryMetadata;
 import org.apache.cayenne.reflect.ArcProperty;
 import org.apache.cayenne.reflect.ClassDescriptor;
 import org.apache.cayenne.reflect.LifecycleCallbackRegistry;
@@ -143,13 +145,27 @@ class DataDomainRelationshipAction {
                 ExpressionFactory.dbPathExp(relationship.getReverseDbRelationshipPath()),
                 sourceId);
 
-        ObjectSelect<Persistent> query = ObjectSelect
-                .query(Persistent.class, relationship.getTargetEntityName())
-                .where(qualifier);
+        ObjectSelect<Persistent> query = relationship.isToMany()
+                ? ObjectSelect.query(Persistent.class, relationship.getTargetEntityName())
+                : new ToOneTargetSelect().entityName(relationship.getTargetEntityName());
+        query.where(qualifier);
 
         @SuppressWarnings("unchecked")
         List<Persistent> related = (List<Persistent>) QueryResults.firstList(domain.onQuery(context, query, false));
         return related;
+    }
+
+    /**
+     * Selects the target of a to-one relationship without refreshing a target that is already registered with a
+     * state of its own, as it may hold resolved relationships and local changes. A HOLLOW or new target takes the
+     * row read, as with any refreshing select. See {@link KeepLoadedObjectsMetadata}.
+     */
+    private static class ToOneTargetSelect extends ObjectSelect<Persistent> {
+
+        @Override
+        public QueryMetadata getMetaData(EntityResolver resolver) {
+            return new KeepLoadedObjectsMetadata(super.getMetaData(resolver));
+        }
     }
 
     /**

@@ -523,7 +523,8 @@ class DataDomainQueryAction implements QueryRouter, OperationObserver {
             // When results come from cache (not a refresh operation), don't refresh objects 
             // to avoid clobbering newer in-memory state
             boolean refresh = metadata.isRefreshingObjects() && !shouldSkipRefresh();
-            return new ObjectResolver(context, descriptor, refresh)
+            boolean keepLoadedObjects = metadata instanceof KeepLoadedObjectsMetadata;
+            return new ObjectResolver(context, descriptor, refresh, keepLoadedObjects)
                     .rootResultNodeFromDataRows(normalizedRows);
         } else {
             // When results come from cache (not a refresh operation), wrap metadata to prevent refreshing objects

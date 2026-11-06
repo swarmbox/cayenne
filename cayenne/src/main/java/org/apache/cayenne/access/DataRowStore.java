@@ -42,6 +42,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 import java.util.concurrent.ConcurrentMap;
 
 /**
@@ -123,6 +124,18 @@ public class DataRowStore {
      * @since 1.2
      */
     void snapshotsUpdatedForObjects(List<Persistent> objects, List<? extends DataRow> snapshots, boolean refresh) {
+        snapshotsUpdatedForObjects(objects, snapshots, object -> refresh);
+    }
+
+    /**
+     * Updates cached snapshots for the list of objects, replacing an object's cached snapshot with its new one only
+     * if the object is refreshed. A snapshot missing from the cache is added either way.
+     *
+     * @param refreshed whether an object has been refreshed from its new snapshot
+     * @since 5.0
+     */
+    void snapshotsUpdatedForObjects(List<Persistent> objects, List<? extends DataRow> snapshots,
+                                    Predicate<Persistent> refreshed) {
 
         int size = objects.size();
 
@@ -158,7 +171,7 @@ public class DataRowStore {
             // missing
 
             DataRow cachedSnapshot = this.snapshots.get(oid);
-            if (refresh || cachedSnapshot == null) {
+            if (cachedSnapshot == null || refreshed.test(object)) {
 
                 DataRow newSnapshot = snapshots.get(i);
 
