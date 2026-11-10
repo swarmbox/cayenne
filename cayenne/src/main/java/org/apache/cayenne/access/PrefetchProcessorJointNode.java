@@ -24,6 +24,7 @@ import org.apache.cayenne.DataRowLayout;
 import org.apache.cayenne.DataRow;
 import org.apache.cayenne.Persistent;
 import org.apache.cayenne.access.jdbc.RSColumn;
+import org.apache.cayenne.access.translator.select.ToOneKeyColumns;
 import org.apache.cayenne.exp.Expression;
 import org.apache.cayenne.exp.ExpressionFactory;
 import org.apache.cayenne.exp.PathExp;
@@ -43,10 +44,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -207,19 +210,44 @@ class PrefetchProcessorJointNode extends PrefetchProcessorNode {
 
         ClassDescriptor descriptor = resolver.getDescriptor();
 
+        // the paths of the tables the query joins for the flattened properties it fetches
+        Set<CayennePath> joinedTables = new HashSet<>();
+
         for (PropertyDescriptor property : descriptor.getAllProperties()) {
             switch (property) {
                 case AttributeProperty attribute -> {
-                    CayennePath target = attribute.getAttribute().getDbAttributePath();
-                    if (!attribute.getAttribute().isLazy()) {
+                    ObjAttribute objAttribute = attribute.getAttribute();
+                    CayennePath target = objAttribute.getDbAttributePath();
+                    if (!objAttribute.isLazy()) {
                         appendColumn(targetSource, target.value(), prefix + target);
+                        if (objAttribute.isFlattened()) {
+                            List<DbRelationship> joins = new ArrayList<>();
+                            objAttribute.getDbPathIterator().forEachRemaining(next -> {
+                                if (next instanceof DbRelationship join) {
+                                    joins.add(join);
+                                }
+                            });
+                            addJoinedTables(joinedTables, joins);
+                        }
                     }
                 }
                 case ArcProperty arc -> {
-                    DbRelationship dbRel = arc.getRelationship().getDbRelationships().get(0);
-                    for (DbAttribute dbAttribute : dbRel.getSourceAttributes()) {
-                        String target = dbAttribute.getName();
-                        appendColumn(targetSource, target, prefix + target);
+                    // the key of a flattened to-one is fetched under path-qualified names only, through the joins
+                    // of its path, and the source columns of its first hop are not fetched for it
+                    List<CayennePath> flattenedKey = ToOneKeyColumns.flattenedKeyPaths(arc.getRelationship());
+                    if (!flattenedKey.isEmpty()) {
+                        for (CayennePath key : flattenedKey) {
+                            appendColumn(targetSource, key.value(), prefix + key);
+                        }
+                        // the hops before the last join the tables the key is fetched through
+                        List<DbRelationship> hops = arc.getRelationship().getDbRelationships();
+                        addJoinedTables(joinedTables, hops.subList(0, hops.size() - 1));
+                    } else {
+                        DbRelationship dbRel = arc.getRelationship().getDbRelationships().get(0);
+                        for (DbAttribute dbAttribute : dbRel.getSourceAttributes()) {
+                            String target = dbAttribute.getName();
+                            appendColumn(targetSource, target, prefix + target);
+                        }
                     }
                 }
                 default -> {
@@ -232,13 +260,25 @@ class PrefetchProcessorJointNode extends PrefetchProcessorNode {
             appendColumn(targetSource, pkName, prefix + pkName);
         }
 
-        // append id columns of additional entities...
-        descriptor.getAdditionalDbEntities().forEach((additionalPath, additionalDescriptor) -> {
-            for (DbAttribute pk : additionalDescriptor.getDbEntity().getPrimaryKeys()) {
-                String name = additionalPath.dot(pk.getName()).value();
-                appendColumn(targetSource, name, prefix + name);
-            }
-        });
+        // append id columns of the additional entities of this entity and of each of its subentities. A row of this
+        // node may be that of a subentity, whose descriptor reads the ids of its own additional entities out of it
+        // (see ObjectResolver.resolveAdditionalIds), e.g. the sub-table PKs of vertical inheritance. Only the ids of
+        // the tables the query joins are in the flat row: the resolver takes a null id for an absent table row and
+        // forgets the id it knew for it, so an id the query did not fetch must be left out of the row. Such is the
+        // table of a flattened to-one entering through a join table (see ToOneKeyColumns.inSourceRow()), or of a
+        // lazy attribute
+        for (ObjEntity entity : descriptor.getEntityInheritanceTree().allSubEntities()) {
+            ClassDescriptor entityDescriptor = descriptor.getSubclassDescriptor(entity.getName());
+            entityDescriptor.getAdditionalDbEntities().forEach((additionalPath, additionalDescriptor) -> {
+                if (!joinedTables.contains(additionalPath)) {
+                    return;
+                }
+                for (DbAttribute pk : additionalDescriptor.getDbEntity().getPrimaryKeys()) {
+                    String name = additionalPath.dot(pk.getName()).value();
+                    appendColumn(targetSource, name, prefix + name);
+                }
+            });
+        }
 
         // append inheritance discriminator columns...
         for (ObjAttribute column : descriptor.getDiscriminatorColumns()) {
@@ -258,6 +298,21 @@ class PrefetchProcessorJointNode extends PrefetchProcessorNode {
         }
         this.rowLayout = DataRowLayout.of(names);
         this.flatReader = DataRowLayout.of(flatNames).reader();
+    }
+
+    /**
+     * Adds the path of each table a chain of joins reaches. The query fetches the PK of each such table it reaches
+     * through a to-one join along with the columns at the end of the chain (see
+     * {@code DbPathProcessor.processRelationship}).
+     */
+    private static void addJoinedTables(Set<CayennePath> joinedTables, List<DbRelationship> joins) {
+        CayennePath path = CayennePath.EMPTY_PATH;
+        for (DbRelationship join : joins) {
+            path = path.dot(join.getName());
+            if (!join.isToMany()) {
+                joinedTables.add(path);
+            }
+        }
     }
 
     private RSColumn appendColumn(
