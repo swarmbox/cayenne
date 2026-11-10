@@ -145,13 +145,9 @@ class DescriptorColumnExtractor extends BaseColumnExtractor {
 
     private void addToOne(ToOneProperty property) {
         ObjRelationship rel = property.getRelationship();
-        // a to-one has a column in the result only if the source row holds its FK, or if it is a flattened path
-        // whose first hop is to a PK: its key is then fetched through the path joins under a path-qualified name
-        // (CAY-2911). An inverse one-to-one has no column of its own here.
-        boolean keyInResult = rel.isFlattened()
-                ? rel.getDbRelationships().getFirst().isToPK()
-                : rel.isFromFK();
-        if(!keyInResult) {
+        // a to-one has columns of its own in the row only if they carry its key (CAY-2911). ToOneKeyColumns decides
+        // that, and names the columns of a flattened to-one for a joint prefetch, which reads them back out of the row
+        if(!ToOneKeyColumns.inSourceRow(rel)) {
             return;
         }
 
