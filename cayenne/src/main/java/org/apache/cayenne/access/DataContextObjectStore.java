@@ -44,6 +44,7 @@ import org.apache.cayenne.reflect.ClassDescriptor;
 import org.apache.cayenne.reflect.PropertyDescriptor;
 import org.apache.cayenne.reflect.ToManyProperty;
 import org.apache.cayenne.reflect.ToOneProperty;
+import org.apache.cayenne.tx.Transaction;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -53,6 +54,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
@@ -353,12 +355,7 @@ public class DataContextObjectStore implements ObjectStore {
                 ObjectId id = object.getObjectId();
                 withObjectLock(id, () -> {
                     switch (object.getPersistenceState()) {
-                        case PersistenceState.NEW -> {
-                            objectMap.remove(id);
-                            object.setObjectContext(null);
-                            object.setObjectId(null);
-                            object.setPersistenceState(PersistenceState.TRANSIENT);
-                        }
+                        case PersistenceState.NEW -> unregisterNew(id, object);
                         // deleted is only a persistence state, so rolling back sets state to committed
                         case PersistenceState.DELETED, PersistenceState.MODIFIED ->
                                 object.setPersistenceState(PersistenceState.HOLLOW);
@@ -373,6 +370,150 @@ public class DataContextObjectStore implements ObjectStore {
             this.changes = new ConcurrentHashMap<>();
             return null;
         });
+    }
+
+    /**
+     * Makes an object that has no row in the database TRANSIENT, unregistering it if it is registered under the id.
+     * The id is cleared, so that the object can't be taken for the row of that id. Requires the object lock.
+     */
+    private void unregisterNew(ObjectId id, Persistent object) {
+        if (objectMap.get(id) == object) {
+            objectMap.remove(id);
+        }
+        trackedFlattenedPaths.remove(id);
+        object.setObjectContext(null);
+        object.setObjectId(null);
+        object.setPersistenceState(PersistenceState.TRANSIENT);
+    }
+
+    /**
+     * Arranges for the commit being postprocessed to be undone, should the transaction it ran in be rolled back
+     * after all. Postprocessing publishes a commit as soon as its queries have run, before the transaction ends: its
+     * objects turn COMMITTED, and its rows go to the shared snapshot cache, where peer contexts merge them. A
+     * failure after that point - a constraint deferred to COMMIT, a later flush in the same transaction, user code
+     * throwing - rolls the database back but none of this, and a retry then diffs against values the database never
+     * kept, silently leaving out every changed value that matches them.
+     * <p>
+     * Publication itself stays where it is, so that callbacks and listeners running later in the same transaction
+     * see the commit as committed, under permanent ids (CAY-766). Called before
+     * {@link #postprocessAfterCommit(GraphDiff)}, while the committed objects are still in their uncommitted states.
+     * <p>
+     * Should the transaction be rolled back, every object the commit wrote is left as
+     * {@link ObjectContext#rollbackChangesLocally()} would leave it, so that the context matches the database: see
+     * {@code commitRolledBack}. The commit's changes are not restored as pending, not even when
+     * {@code commitChanges()} owned the transaction and failed at COMMIT, unlike a failure while its queries run. The
+     * application re-applies them, or re-runs its transaction.
+     * <p>
+     * A transaction that commits many rows to the shared cache has them undone coarsely instead, so that it doesn't
+     * hold on to every id until it ends: the COMMITTED objects of the entities its commits wrote turn HOLLOW, and the
+     * shared cache forgets every snapshot of those entities. See {@link CommitRollbackListener}.
+     *
+     * @param transaction           the transaction the commit ran in
+     * @param committed             the changes being committed
+     * @param writtenIds            the ids of the rows the commit inserted, updated or deleted
+     * @param indirectlyModifiedIds the ids of the objects whose relationships the commit changed
+     * @since 5.0
+     */
+    public void undoCommitOnRollback(Transaction transaction, ObjectStoreGraphDiff committed,
+                                     Collection<ObjectId> writtenIds, Collection<ObjectId> indirectlyModifiedIds) {
+        dataRowCache.rollbackListener(transaction)
+                .addCommit(this, committed.getChangesByObjectId().values(), writtenIds, indirectlyModifiedIds);
+    }
+
+    /**
+     * Turns the COMMITTED objects of the given entities HOLLOW, so that their next access reads the database. Objects
+     * with pending changes keep them. This is the coarse undo of the commits of a rolled back transaction, see
+     * {@link CommitRollbackListener}.
+     */
+    void committedObjectsInvalidated(Set<String> entityNames) {
+        withChangesLock(() -> {
+            List<ObjectId> invalidated = new ArrayList<>();
+            for (Persistent object : objectMap.values()) {
+                boolean committedOfEntity = object != null
+                        && object.getPersistenceState() == PersistenceState.COMMITTED
+                        && entityNames.contains(object.getObjectId().getEntityName());
+                if (committedOfEntity) {
+                    invalidated.add(object.getObjectId());
+                }
+            }
+            objectsInvalidated(invalidated);
+            return null;
+        });
+    }
+
+    /**
+     * Undoes {@link #postprocessAfterCommit(GraphDiff)} for a commit whose transaction was rolled back. The
+     * database holds none of the commit's changes, so the objects the commit wrote are left as
+     * {@link ObjectContext#rollbackChangesLocally()} would leave them: those it inserted are unregistered and
+     * TRANSIENT, and those it updated or deleted are registered and HOLLOW, so that their next access reads the
+     * database. Changes recorded on them since the commit are discarded too, as they were recorded against values
+     * the database does not hold. Other objects keep their pending changes. Does not touch the snapshot cache.
+     * <p>
+     * A transaction may commit the same objects several times, and the commits are undone in the order they were
+     * made. An inserted object loses its id here, so that the undoing of a later commit that updated or deleted it
+     * leaves it alone rather than taking it for a row that exists.
+     */
+    void commitRolledBack(Collection<Persistent> inserted, Collection<Persistent> updated,
+                          Collection<Persistent> deleted) {
+        withChangesLock(() -> {
+            for (Persistent object : inserted) {
+                unregisterRolledBackInsert(object);
+            }
+
+            List<ObjectId> invalidated = new ArrayList<>(updated.size() + deleted.size());
+            for (Persistent object : updated) {
+                addIdIfAny(invalidated, object);
+            }
+            for (Persistent object : deleted) {
+                reregisterRolledBackDelete(object);
+                addIdIfAny(invalidated, object);
+            }
+
+            // the objects registered under these ids, whichever they are, may hold the rolled back values
+            objectsInvalidated(invalidated);
+            return null;
+        });
+    }
+
+    private void unregisterRolledBackInsert(Persistent object) {
+        ObjectId id = object.getObjectId();
+        boolean alreadyUndone = id == null;
+        boolean registeredElsewhere = object.getObjectContext() != null && object.getObjectContext() != context;
+        if (alreadyUndone || registeredElsewhere) {
+            return;
+        }
+
+        changes.remove(id);
+        withObjectLock(id, () -> {
+            unregisterNew(id, object);
+            return null;
+        });
+    }
+
+    /**
+     * Registers a deleted object again, unless something else has been registered under its id meanwhile. It is
+     * initialized before it becomes visible to other threads, as {@link #getOrCreateObject(ObjectId)} does.
+     */
+    private void reregisterRolledBackDelete(Persistent object) {
+        ObjectId id = object.getObjectId();
+        boolean insertUndone = id == null;
+        boolean registered = object.getObjectContext() != null;
+        if (insertUndone || registered) {
+            return;
+        }
+
+        objectMap.computeIfAbsent(id, key -> withObjectLock(key, () -> {
+            object.setObjectContext(context);
+            object.setPersistenceState(PersistenceState.HOLLOW);
+            return object;
+        }));
+    }
+
+    private static void addIdIfAny(Collection<ObjectId> ids, Persistent object) {
+        ObjectId id = object.getObjectId();
+        if (id != null) {
+            ids.add(id);
+        }
     }
 
     /**

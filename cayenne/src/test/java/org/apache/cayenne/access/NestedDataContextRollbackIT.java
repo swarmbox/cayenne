@@ -19,12 +19,22 @@
 package org.apache.cayenne.access;
 
 import org.apache.cayenne.ObjectContext;
+import org.apache.cayenne.ObjectId;
+import org.apache.cayenne.PersistenceState;
+import org.apache.cayenne.Persistent;
 import org.apache.cayenne.testdo.testmap.Artist;
 import org.apache.cayenne.unit.CayenneProjects;
 import org.apache.cayenne.unit.CayenneTestsEnv;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.Test;
+
+import java.sql.SQLException;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class NestedDataContextRollbackIT {
@@ -66,5 +76,32 @@ public class NestedDataContextRollbackIT {
         child1.rollbackChangesLocally();
         assertTrue(env.context().hasChanges());
         assertFalse(child1.hasChanges());
+    }
+
+    // a rolled back new object is unregistered, so that its id resolves to the row once there is one
+    @Test
+    public void rollbackChangesLocally_NewObjectUnregistered() throws SQLException {
+        DataContext child = (DataContext) env.runtime().newContext(env.context());
+        ObjectId id = ObjectId.of("Artist", Artist.ARTIST_ID_PK_COLUMN, 1);
+        Artist rolledBack = new Artist();
+        rolledBack.setObjectId(id);
+        child.registerNewObject(rolledBack);
+        rolledBack.setArtistName("rolled back");
+
+        child.rollbackChangesLocally();
+
+        assertNull(child.getObjectStore().getObject(id));
+        assertEquals(PersistenceState.TRANSIENT, rolledBack.getPersistenceState());
+        assertNull(rolledBack.getObjectContext());
+        assertNull(rolledBack.getObjectId());
+        assertNull(child.objectForPK(id));
+
+        env.table("ARTIST").setColumns("ARTIST_ID", "ARTIST_NAME").insert(1, "inserted");
+
+        Persistent resolved = child.objectForPK(id);
+        assertNotSame(rolledBack, resolved);
+        assertSame(child, resolved.getObjectContext());
+        assertEquals(PersistenceState.COMMITTED, resolved.getPersistenceState());
+        assertEquals("inserted", ((Artist) resolved).getArtistName());
     }
 }

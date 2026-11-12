@@ -261,6 +261,18 @@ In the second scenario, an application might need to define its own transaction 
 include::{java-examples}/ObjectContextTest.java[tags=performInTransaction]
 ----
 
+A commit that has run its queries is reflected in the ObjectContext right away, before the transaction ends: its objects
+become COMMITTED and its rows are cached and seen by other contexts. Should the transaction be rolled back after that,
+e.g. because a later operation in it fails, or a deferred constraint fails at COMMIT, every object the commit wrote is
+left as `rollbackChangesLocally` would leave it: new objects become TRANSIENT, while modified and deleted objects are
+reset to their state in the database, and the cache and the other contexts forget the commit's rows. The changes are not
+restored as pending, so to retry, re-apply them, or re-run the whole transaction. This is unlike a commit failing while
+its queries run, which leaves its changes pending in the context. A transaction whose commits write many rows (several
+thousand) has them undone by entity instead, so that it doesn't hold on to each row until it ends: the committed objects
+of the entities its commits wrote are reset to their state in the database, objects with pending changes keep them, and
+the cache forgets those entities' rows, while the other contexts keep the values they took from the commits until they
+are refreshed.
+
 When inside a transaction, current thread Transaction object can be accessed via a static method:
 [source,java,indent=0]
 ----

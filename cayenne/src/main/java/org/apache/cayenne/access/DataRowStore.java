@@ -28,6 +28,7 @@ import org.apache.cayenne.access.event.SnapshotEvent;
 import org.apache.cayenne.event.EventBridge;
 import org.apache.cayenne.event.EventManager;
 import org.apache.cayenne.event.EventSubject;
+import org.apache.cayenne.tx.Transaction;
 import org.apache.cayenne.util.ClockMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +39,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 import java.util.concurrent.ConcurrentMap;
 
@@ -72,6 +75,11 @@ public class DataRowStore {
     // IMPORTANT: EventSubject must be an ivar to avoid its deallocation
     // too early, and thus disabling events.
     protected EventSubject eventSubject;
+
+    // per transaction, the listener that undoes the commits published to this cache should it roll back. Keyed weakly,
+    // so that a transaction that never ends doesn't stay here, while the listener removes itself when it does end
+    private final Map<Transaction, CommitRollbackListener> rollbackListeners =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     /**
      * @param name         DataRowStore name. Used to identify this DataRowStore in events, etc. Can't be null.
@@ -271,6 +279,42 @@ public class DataRowStore {
      */
     public void forgetSnapshot(ObjectId id) {
         snapshots.remove(id);
+    }
+
+    /**
+     * Evicts the snapshots of the given entities from the cache without generating any SnapshotEvents.
+     *
+     * @since 5.0
+     */
+    void forgetSnapshots(Set<String> entityNames) {
+        for (ObjectId id : snapshots.keySet()) {
+            if (entityNames.contains(id.getEntityName())) {
+                snapshots.remove(id);
+            }
+        }
+    }
+
+    /**
+     * Returns the listener that undoes the commits published to this cache in the transaction should it roll back,
+     * adding a new one to the transaction for its first commit.
+     *
+     * @since 5.0
+     */
+    CommitRollbackListener rollbackListener(Transaction transaction) {
+        return rollbackListeners.computeIfAbsent(transaction, tx -> {
+            CommitRollbackListener listener = new CommitRollbackListener(this);
+            tx.addListener(listener);
+            return listener;
+        });
+    }
+
+    /**
+     * Forgets the rollback listener of a transaction that has ended.
+     *
+     * @since 5.0
+     */
+    void rollbackListenerDone(Transaction transaction) {
+        rollbackListeners.remove(transaction);
     }
 
     /**

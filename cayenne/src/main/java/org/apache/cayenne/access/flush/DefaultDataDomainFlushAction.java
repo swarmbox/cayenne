@@ -40,6 +40,8 @@ import org.apache.cayenne.graph.CompoundDiff;
 import org.apache.cayenne.graph.GraphDiff;
 import org.apache.cayenne.map.EntityResolver;
 import org.apache.cayenne.query.Query;
+import org.apache.cayenne.tx.BaseTransaction;
+import org.apache.cayenne.tx.Transaction;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -228,6 +230,9 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
         DataDomainIndirectDiffBuilder indirectDiffBuilder = new DataDomainIndirectDiffBuilder(context.getEntityResolver());
         indirectDiffBuilder.processChanges(changes);
 
+        // before publishing, so that a failure while publishing is undone as well
+        undoOnRollback(objectStore, changes, postprocessor, indirectDiffBuilder.getIndirectModifications());
+
         objectStore.getDataRowCache()
                 .processSnapshotChanges(
                         objectStore,
@@ -237,6 +242,28 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
                         indirectDiffBuilder.getIndirectModifications()
                 );
         objectStore.postprocessAfterCommit(afterCommitDiff);
+    }
+
+    /**
+     * Has this commit undone if the transaction it runs in is rolled back after all - see
+     * {@link DataContextObjectStore#undoCommitOnRollback}. With no transaction there is nothing to undo, as the
+     * queries ran outside of one and nothing can roll them back.
+     */
+    private void undoOnRollback(DataContextObjectStore objectStore, ObjectStoreGraphDiff changes,
+                                PostprocessVisitor postprocessor, Collection<ObjectId> indirectlyModifiedIds) {
+        Transaction transaction = BaseTransaction.getThreadTransaction();
+        if (transaction == null) {
+            return;
+        }
+
+        List<ObjectId> writtenIds = new ArrayList<>(postprocessor.getUpdatedSnapshots().keySet());
+        writtenIds.addAll(postprocessor.getDeletedIds());
+
+        // null when the commit changed no relationships indirectly
+        List<ObjectId> indirectIds = indirectlyModifiedIds != null
+                ? List.copyOf(indirectlyModifiedIds)
+                : List.of();
+        objectStore.undoCommitOnRollback(transaction, changes, writtenIds, indirectIds);
     }
 
     protected static class PhantomDbRowOpCleaner implements DbRowOpVisitor<Void> {

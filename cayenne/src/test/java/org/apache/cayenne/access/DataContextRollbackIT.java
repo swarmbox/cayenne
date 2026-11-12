@@ -19,9 +19,14 @@
 
 package org.apache.cayenne.access;
 
+import java.sql.SQLException;
 import java.util.List;
+import java.util.function.Consumer;
 
+import org.apache.cayenne.ObjectContext;
+import org.apache.cayenne.ObjectId;
 import org.apache.cayenne.PersistenceState;
+import org.apache.cayenne.Persistent;
 import org.apache.cayenne.query.ObjectSelect;
 import org.apache.cayenne.testdo.testmap.Artist;
 import org.apache.cayenne.testdo.testmap.Painting;
@@ -32,6 +37,8 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class DataContextRollbackIT  {
@@ -211,5 +218,41 @@ public class DataContextRollbackIT  {
                 .select(freshContext);
 
         assertEquals(1, queryResults.size());
+    }
+
+    @Test
+    public void rollbackChangesLocally_NewObjectUnregistered() throws SQLException {
+        rollbackThenResolveId(ObjectContext::rollbackChangesLocally);
+    }
+
+    @Test
+    public void rollbackChanges_NewObjectUnregistered() throws SQLException {
+        rollbackThenResolveId(ObjectContext::rollbackChanges);
+    }
+
+    // a rolled back new object is unregistered, so that its id resolves to the row once there is one
+    private void rollbackThenResolveId(Consumer<ObjectContext> rollback) throws SQLException {
+        DataContext context = env.context();
+        ObjectId id = ObjectId.of("Artist", Artist.ARTIST_ID_PK_COLUMN, 1);
+        Artist rolledBack = new Artist();
+        rolledBack.setObjectId(id);
+        context.registerNewObject(rolledBack);
+        rolledBack.setArtistName("rolled back");
+
+        rollback.accept(context);
+
+        assertNull(context.getObjectStore().getObject(id));
+        assertEquals(PersistenceState.TRANSIENT, rolledBack.getPersistenceState());
+        assertNull(rolledBack.getObjectContext());
+        assertNull(rolledBack.getObjectId());
+        assertNull(context.objectForPK(id));
+
+        env.table("ARTIST").setColumns("ARTIST_ID", "ARTIST_NAME").insert(1, "inserted");
+
+        Persistent resolved = context.objectForPK(id);
+        assertNotSame(rolledBack, resolved);
+        assertSame(context, resolved.getObjectContext());
+        assertEquals(PersistenceState.COMMITTED, resolved.getPersistenceState());
+        assertEquals("inserted", ((Artist) resolved).getArtistName());
     }
 }
