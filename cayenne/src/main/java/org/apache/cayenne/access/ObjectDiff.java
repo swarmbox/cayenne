@@ -132,6 +132,16 @@ public class ObjectDiff extends NodeDiff {
         return snapshot != null ? snapshot.get(propertyName) : null;
     }
 
+    /**
+     * Replaces the snapshot value of an attribute, i.e. the value its change is reported against, with a value its row
+     * took without a change of the object.
+     */
+    void updateSnapshotValue(String propertyName, Object value) {
+        if (snapshot != null && snapshot.containsKey(propertyName)) {
+            snapshot.put(propertyName, value);
+        }
+    }
+
     public ObjectId getArcSnapshotValue(String propertyName) {
         Object value = arcSnapshot != null ? arcSnapshot.get(propertyName) : null;
 
@@ -143,6 +153,16 @@ public class ObjectDiff extends NodeDiff {
         }
 
         return (ObjectId) value;
+    }
+
+    /**
+     * Returns whether the snapshot value of a to-one is a fault that was never resolved. Unlike
+     * {@link #getArcSnapshotValue(String)}, doesn't resolve it.
+     *
+     * @since 5.0
+     */
+    public boolean isArcSnapshotFault(String propertyName) {
+        return arcSnapshot != null && arcSnapshot.get(propertyName) instanceof Fault;
     }
 
     /**

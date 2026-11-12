@@ -3,6 +3,29 @@
 	 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	 xsi:schemaLocation="http://cayenne.apache.org/schema/14/dataMap https://cayenne.apache.org/schema/14/dataMap.xsd"
 	 defaultPackage="org.apache.cayenne.testdo.locking">
+	<dbEntity name="FLATTENED_LOCK_ORDER">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
+	</dbEntity>
+	<dbEntity name="FLATTENED_LOCK_ORDER_EXT">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="REV" type="INTEGER"/>
+	</dbEntity>
+	<dbEntity name="LOCKED_DOC">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="KIND" type="VARCHAR" length="2"/>
+		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
+		<dbAttribute name="REV" type="INTEGER"/>
+	</dbEntity>
+	<dbEntity name="LOCKED_PARTY">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
+		<dbAttribute name="TYPE" type="VARCHAR" length="2"/>
+	</dbEntity>
+	<dbEntity name="LOCKED_PERSON">
+		<dbAttribute name="ID" type="INTEGER" primaryKey="true" mandatory="true"/>
+		<dbAttribute name="REV" type="INTEGER"/>
+	</dbEntity>
 	<dbEntity name="LOCKING_HELPER">
 		<dbAttribute name="LOCKING_HELPER_ID" type="INTEGER" primaryKey="true" mandatory="true"/>
 		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
@@ -20,8 +43,31 @@
 		<dbAttribute name="LOCKING_TEST_ID" type="INTEGER" primaryKey="true" mandatory="true"/>
 		<dbAttribute name="NAME" type="VARCHAR" length="100"/>
 	</dbEntity>
+	<objEntity name="FlattenedLockOrder" className="org.apache.cayenne.testdo.locking.FlattenedLockOrder" lockType="optimistic" dbEntityName="FLATTENED_LOCK_ORDER">
+		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+		<objAttribute name="rev" type="java.lang.Integer" lock="true" dbAttributePath="ext.REV"/>
+	</objEntity>
+	<objEntity name="InheritedLockMemo" superEntityName="LockedDoc" className="org.apache.cayenne.testdo.locking.InheritedLockMemo">
+		<qualifier><![CDATA[kind = "M"]]></qualifier>
+	</objEntity>
+	<objEntity name="LockedDoc" className="org.apache.cayenne.testdo.locking.LockedDoc" lockType="optimistic" dbEntityName="LOCKED_DOC">
+		<objAttribute name="kind" type="java.lang.String" dbAttributePath="KIND"/>
+		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+		<objAttribute name="rev" type="java.lang.Integer" lock="true" dbAttributePath="REV"/>
+	</objEntity>
+	<objEntity name="LockedParty" abstract="true" className="org.apache.cayenne.testdo.locking.LockedParty" lockType="optimistic" dbEntityName="LOCKED_PARTY">
+		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+		<objAttribute name="type" type="java.lang.String" dbAttributePath="TYPE"/>
+	</objEntity>
+	<objEntity name="LockedPerson" superEntityName="LockedParty" className="org.apache.cayenne.testdo.locking.LockedPerson" lockType="optimistic">
+		<qualifier><![CDATA[type = "P"]]></qualifier>
+		<objAttribute name="rev" type="java.lang.Integer" lock="true" dbAttributePath="person.REV"/>
+	</objEntity>
 	<objEntity name="LockingHelper" className="org.apache.cayenne.testdo.locking.LockingHelper" dbEntityName="LOCKING_HELPER">
 		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
+	</objEntity>
+	<objEntity name="RedeclaredLockNote" superEntityName="LockedDoc" className="org.apache.cayenne.testdo.locking.RedeclaredLockNote" lockType="optimistic">
+		<qualifier><![CDATA[kind = "N"]]></qualifier>
 	</objEntity>
 	<objEntity name="RelLockingTestEntity" className="org.apache.cayenne.testdo.locking.RelLockingTestEntity" lockType="optimistic" dbEntityName="REL_LOCKING_TEST">
 		<objAttribute name="name" type="java.lang.String" dbAttributePath="NAME"/>
@@ -32,6 +78,18 @@
 		<objAttribute name="intColumnNull" type="int" lock="true" dbAttributePath="INT_COLUMN_NULL"/>
 		<objAttribute name="name" type="java.lang.String" lock="true" dbAttributePath="NAME"/>
 	</objEntity>
+	<dbRelationship name="ext" source="FLATTENED_LOCK_ORDER" target="FLATTENED_LOCK_ORDER_EXT" toDependentPK="true">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="order" source="FLATTENED_LOCK_ORDER_EXT" target="FLATTENED_LOCK_ORDER">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="person" source="LOCKED_PARTY" target="LOCKED_PERSON" toDependentPK="true">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
+	<dbRelationship name="party" source="LOCKED_PERSON" target="LOCKED_PARTY">
+		<dbAttributePair source="ID" target="ID"/>
+	</dbRelationship>
 	<dbRelationship name="toRelLockingTest" source="LOCKING_HELPER" target="REL_LOCKING_TEST">
 		<dbAttributePair source="REL_LOCKING_TEST_ID" target="REL_LOCKING_TEST_ID"/>
 	</dbRelationship>

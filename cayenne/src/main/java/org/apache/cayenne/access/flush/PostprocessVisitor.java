@@ -60,21 +60,30 @@ class PostprocessVisitor implements DbRowOpVisitor<Void> {
 
     @Override
     public Void visitInsert(InsertDbRowOp dbRow) {
-        processObjectChange(dbRow);
+        if (isObjectRow(dbRow)) {
+            processObjectChange(dbRow);
+        }
         return null;
     }
 
     @Override
     public Void visitUpdate(UpdateDbRowOp dbRow) {
-        processObjectChange(dbRow);
+        if (isObjectRow(dbRow)) {
+            // the snapshot below is the object's full state, so the columns this update did not write must be as new
+            // as the cached row, which another context may have changed since the object was last merged
+            context.getObjectStore().mergeNewerCachedSnapshot(dbRow.getObject());
+
+            processObjectChange(dbRow);
+        }
         return null;
     }
 
-    private void processObjectChange(DbRowOp dbRow) {
-        if (dbRow.getChangeId().getEntityName().startsWith(DbPathExp.DB_PREFIX)) {
-            return;
-        }
+    // the rows of flattened attributes and relationships are written for an object, but are not its snapshot
+    private static boolean isObjectRow(DbRowOp dbRow) {
+        return !dbRow.getChangeId().getEntityName().startsWith(DbPathExp.DB_PREFIX);
+    }
 
+    private void processObjectChange(DbRowOp dbRow) {
         DataRow dataRow = ObjectSnapshots.snapshot(context, dbRow.getObject(), version);
 
         if (dbRow.getObject() != null) {

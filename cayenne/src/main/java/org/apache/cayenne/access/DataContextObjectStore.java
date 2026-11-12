@@ -975,16 +975,58 @@ public class DataContextObjectStore implements ObjectStore {
     }
 
     /**
+     * Brings a MODIFIED object that is being committed up to date with the cached snapshot of its row, if that
+     * snapshot is newer than the object: the properties the commit did not change take the cached values. The commit
+     * snapshot of the object, taken afterwards, then carries the values of the cached row for the columns the commit
+     * did not write, rather than older values that would revert the cached row and the peer objects refreshed from it.
+     * The object lags behind a newer cached row when it missed the event of the change that produced it, e.g. because
+     * its own commit was holding the changes lock when the event arrived. The merged values are not changes of the
+     * object: they are not recorded, and its diff, which the commit was built from, still lists only the commit's
+     * changes.
+     *
+     * @since 5.0
+     */
+    public void mergeNewerCachedSnapshot(Persistent object) {
+        if (object.getPersistenceState() != PersistenceState.MODIFIED) {
+            return;
+        }
+
+        ObjectId id = object.getObjectId();
+        DataRow snapshot = getCachedSnapshot(id);
+        boolean cachedIsNewer = snapshot != null && snapshot.getVersion() > object.getSnapshotVersion();
+        if (!cachedIsNewer) {
+            return;
+        }
+
+        DataContextDelegate delegate = context.nonNullDelegate();
+        if (delegate.shouldMergeChanges(object, snapshot)) {
+            ClassDescriptor descriptor = context.getEntityResolver().getClassDescriptor(id.getEntityName());
+            mergeDirty(object, descriptor, snapshot, snapshot.getVersion(), true);
+            delegate.finishedMergeChanges(object);
+        }
+    }
+
+    private void mergeDirty(Persistent object, ClassDescriptor descriptor, Map<String, Object> snapshot, long version) {
+        mergeDirty(object, descriptor, snapshot, version, false);
+    }
+
+    /**
      * Merges a snapshot into a MODIFIED or DELETED object, leaving the uncommitted changes in place. Such a merge may
      * record changes to the object, so it takes the changes lock before the object lock. The snapshot is only merged
-     * if it is not older than the one the object already reflects.
+     * if it is not older than the one the object already reflects. With {@code committing}, the object is being
+     * committed, and the merge records no changes (see {@link DataRowUtils#forceMergeWithSnapshot}).
      */
-    private void mergeDirty(Persistent object, ClassDescriptor descriptor, Map<String, Object> snapshot, long version) {
+    private void mergeDirty(
+            Persistent object,
+            ClassDescriptor descriptor,
+            Map<String, Object> snapshot,
+            long version,
+            boolean committing) {
         withChangesLock(() -> withObjectLock(object.getObjectId(), () -> {
             int state = object.getPersistenceState();
             if ((state == PersistenceState.MODIFIED || state == PersistenceState.DELETED)
                     && version >= object.getSnapshotVersion()) {
-                DataRowUtils.forceMergeWithSnapshot(context, descriptor, object, snapshot);
+                DataRowUtils.forceMergeWithSnapshot(context, descriptor, object, snapshot, committing);
                 object.setSnapshotVersion(version);
             }
             return null;

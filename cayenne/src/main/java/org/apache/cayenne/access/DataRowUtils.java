@@ -28,6 +28,7 @@ import org.apache.cayenne.map.DbJoin;
 import org.apache.cayenne.map.DbRelationship;
 import org.apache.cayenne.map.EntityInheritanceTree;
 import org.apache.cayenne.map.EntityResolver;
+import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
 import org.apache.cayenne.map.ObjRelationship;
 import org.apache.cayenne.reflect.ArcProperty;
@@ -188,6 +189,22 @@ class DataRowUtils {
             ClassDescriptor descriptor,
             Persistent object,
             Map<String, Object> snapshot) {
+        forceMergeWithSnapshot(context, descriptor, object, snapshot, false);
+    }
+
+    /**
+     * Merges a snapshot, or a diff of one, into a MODIFIED or DELETED object: the properties the object has not
+     * changed take the snapshot values. With {@code committing}, the object is being committed and its diff was
+     * already taken for the commit: the merged values are written without being recorded as changes of the object,
+     * and the merged attributes take them as their diff snapshot values, so the diff still lists only the changes the
+     * commit wrote.
+     */
+    static void forceMergeWithSnapshot(
+            DataContext context,
+            ClassDescriptor descriptor,
+            Persistent object,
+            Map<String, Object> snapshot,
+            boolean committing) {
 
         ObjectDiff diff = context
                 .getObjectStore()
@@ -197,19 +214,43 @@ class DataRowUtils {
         // to-many relationships have nothing to merge
         for (PropertyDescriptor property : descriptor.getProperties()) {
             switch (property) {
-                case AttributeProperty attribute -> mergeAttribute(attribute, object, snapshot, diff);
-                case ToOneProperty toOne -> mergeToOne(context, toOne, object, snapshot, diff);
+                case AttributeProperty attribute -> {
+                    if (!isLockValueOfFirstChange(descriptor, attribute, diff)) {
+                        mergeAttribute(attribute, object, snapshot, diff, committing);
+                    }
+                }
+                case ToOneProperty toOne -> mergeToOne(context, toOne, object, snapshot, diff, committing);
                 default -> {
                 }
             }
         }
     }
 
+    /**
+     * Returns whether an attribute qualifies the commit of an object whose first change is being recorded: the entity
+     * declares optimistic locking, and the attribute is a lock attribute of the entity's own table, as the commit's
+     * {@code OptimisticLockQualifierBuilder} requires. The diff created for that change takes the values the object
+     * holds as the values its commit is qualified with, so such an attribute keeps the value read, and the commit
+     * fails if another commit changed it since.
+     */
+    private static boolean isLockValueOfFirstChange(
+            ClassDescriptor descriptor,
+            AttributeProperty property,
+            ObjectDiff diff) {
+        ObjEntity entity = descriptor.getEntity();
+        ObjAttribute attribute = property.getAttribute();
+        return diff == null
+                && entity.getDeclaredLockType() == ObjEntity.LOCK_TYPE_OPTIMISTIC
+                && attribute.isUsedForLocking()
+                && attribute.getDbAttribute().getEntity() == entity.getDbEntity();
+    }
+
     private static void mergeAttribute(
             AttributeProperty property,
             Persistent object,
             Map<String, Object> snapshot,
-            ObjectDiff diff) {
+            ObjectDiff diff,
+            boolean committing) {
 
         String dbAttrPath = property.getAttribute().getDbAttributePath().value();
 
@@ -220,11 +261,18 @@ class DataRowUtils {
         if (newValue != null || snapshot.containsKey(dbAttrPath)) {
 
             Object curValue = property.readPropertyDirectly(object);
-            Object oldValue = diff != null ? diff.getSnapshotValue(property.getName()) : null;
+
+            // an object with no diff has no recorded changes, i.e. its first change is being recorded: every value
+            // is unmodified, as it is for a to-one
+            Object oldValue = diff != null ? diff.getSnapshotValue(property.getName()) : curValue;
 
             // if value not modified, update it from snapshot, otherwise leave it alone
             if (property.equals(curValue, oldValue) && !property.equals(newValue, curValue)) {
                 property.writePropertyDirectly(object, oldValue, newValue);
+
+                if (committing && diff != null) {
+                    diff.updateSnapshotValue(property.getName(), newValue);
+                }
             }
         }
     }
@@ -234,7 +282,8 @@ class DataRowUtils {
             ToOneProperty property,
             Persistent object,
             Map<String, Object> snapshot,
-            ObjectDiff diff) {
+            ObjectDiff diff,
+            boolean committing) {
 
         ObjRelationship relationship = property.getRelationship();
         DbRelationship dbRelationship = relationship.getDbRelationships().getFirst();
@@ -246,6 +295,10 @@ class DataRowUtils {
 
         // if value not modified, update it from snapshot, otherwise leave it alone
         if (isToOneTargetModified(property, object, diff)) {
+            return;
+        }
+
+        if (isNeverResolved(property, object, diff)) {
             return;
         }
 
@@ -262,15 +315,35 @@ class DataRowUtils {
                 || !property.equals(id, diff.getArcSnapshotValue(relationship.getName()))) {
 
             if (id == null) {
-                property.writeProperty(object, null, null);
+                writeToOne(property, object, null, committing);
             } else if (!isTargetDeterminedByFK(relationship, context.getEntityResolver())) {
                 // we can't use 'localObject' if relationship is optional or inheritance is involved
                 // .. must turn to fault instead
                 property.invalidate(object);
             } else {
-                property.writeProperty(object, null, context.findOrCreateObject(id));
+                writeToOne(property, object, context.findOrCreateObject(id), committing);
             }
         }
+    }
+
+    private static void writeToOne(ToOneProperty property, Persistent object, Object target, boolean committing) {
+        if (committing) {
+            property.writePropertyDirectly(object, null, target);
+        } else {
+            property.writeProperty(object, null, target);
+        }
+    }
+
+    /**
+     * Returns whether a to-one of an object with changes is a fault that was never resolved, neither in the object nor
+     * in the snapshot of its diff. The object then holds nothing of the target to bring up to date, as the fault
+     * resolves against the newer data when it is read, and comparing the snapshot with the merged row would resolve it
+     * with a query.
+     */
+    private static boolean isNeverResolved(ToOneProperty property, Persistent object, ObjectDiff diff) {
+        return diff != null
+                && diff.isArcSnapshotFault(property.getName())
+                && property.isFaultValue(property.readPropertyDirectly(object));
     }
 
     static boolean hasFK(DbRelationship relationship, Map<String, Object> snapshot) {

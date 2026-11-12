@@ -520,4 +520,26 @@ public class OptimisticLockingIT {
         Map<?, ?> freshFailedRow = ex.getFreshSnapshot(context);
         assertNull(freshFailedRow, "" + freshFailedRow);
     }
+
+    /**
+     * A peer context sharing the snapshot cache commits a change of a lock column, then this context, which read the
+     * row before and has no changes, changes the same column. Its first change merges the newer cached row, but must
+     * keep the value it read as the lock baseline.
+     */
+    @Test
+    public void failSimpleLockingOnUpdateAfterPeerCommit() throws Exception {
+        createSimpleLockingDataSet();
+
+        SimpleLockingTestEntity object = ObjectSelect.query(SimpleLockingTestEntity.class).selectOne(context);
+
+        DataContext peerContext = (DataContext) env.runtime().newContext();
+        SimpleLockingTestEntity peerObject = ObjectSelect.query(SimpleLockingTestEntity.class).selectOne(peerContext);
+        peerObject.setName("LockTest1Peer");
+        peerContext.commitChanges();
+
+        object.setName("LockTest1Updated");
+
+        assertThrows(OptimisticLockException.class, context::commitChanges);
+        assertEquals("LockTest1Peer", tSimpleLockingTest.getString("NAME"));
+    }
 }
