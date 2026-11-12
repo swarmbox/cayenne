@@ -31,6 +31,7 @@ import org.apache.cayenne.testdo.testmap.ArtistExhibit;
 import org.apache.cayenne.testdo.testmap.Exhibit;
 import org.apache.cayenne.testdo.testmap.Gallery;
 import org.apache.cayenne.testdo.testmap.Painting;
+import org.apache.cayenne.testdo.testmap.PaintingInfo;
 import org.apache.cayenne.unit.CayenneProjects;
 import org.apache.cayenne.unit.CayenneTestsEnv;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,8 +60,12 @@ public class DataContextPrefetchMultistepIT  {
     protected TableHelper tExhibit;
     protected TableHelper tGallery;
     protected TableHelper tArtistExhibit;
+    protected TableHelper tPainting;
+    protected TableHelper tPaintingInfo;
+    protected TableHelper tArtGroup;
+    protected TableHelper tArtistGroup;
 
-    
+
     @BeforeEach
     public void setUp() throws Exception {
         context = env.context();
@@ -72,6 +77,11 @@ public class DataContextPrefetchMultistepIT  {
         tArtistExhibit = env.table("ARTIST_EXHIBIT", "ARTIST_ID", "EXHIBIT_ID");
 
         tGallery = env.table("GALLERY", "GALLERY_ID", "GALLERY_NAME");
+
+        tPainting = env.table("PAINTING", "PAINTING_ID", "ARTIST_ID", "PAINTING_TITLE");
+        tPaintingInfo = env.table("PAINTING_INFO", "PAINTING_ID", "TEXT_REVIEW");
+        tArtGroup = env.table("ARTGROUP", "GROUP_ID", "NAME");
+        tArtistGroup = env.table("ARTIST_GROUP", "ARTIST_ID", "GROUP_ID");
     }
 
     protected void createTwoArtistsWithExhibitsDataSet() throws Exception {
@@ -96,6 +106,28 @@ public class DataContextPrefetchMultistepIT  {
         tArtistExhibit.insert(101, 4);
     }
     
+    protected void createArtistsWithPaintingsAndInfosDataSet() throws Exception {
+        tArtist.insert(1, "artist1");
+        tArtist.insert(2, "artist2");
+
+        tPainting.insert(1, 1, "painting1");
+        tPainting.insert(2, 1, "painting2");
+        tPainting.insert(3, 2, "painting3");
+        tPainting.insert(4, 2, "painting4");
+
+        tPaintingInfo.insert(1, "review1");
+        tPaintingInfo.insert(2, "review2");
+        tPaintingInfo.insert(3, "review3");
+        tPaintingInfo.insert(4, "review4");
+
+        tArtGroup.insert(1, "group1");
+        tArtGroup.insert(2, "group2");
+
+        tArtistGroup.insert(1, 1);
+        tArtistGroup.insert(1, 2);
+        tArtistGroup.insert(2, 1);
+    }
+
     protected void createGalleriesAndArtists() throws Exception {
         tArtist.insert(11, "artist2");
         tArtist.insert(101, "artist3");
@@ -434,5 +466,121 @@ public class DataContextPrefetchMultistepIT  {
                 .select(context);
 
         assertNotNull(gallery.getPaintingArray().get(0).getToArtist());
+    }
+
+    // A disjoint prefetch under a disjoint-by-id one runs with the main query, before the query of its parents, so its
+    // rows are older than the parents this same query refreshes. Its relationships must be resolved all the same.
+
+    @Test
+    public void prefetchToOneWithFkInChildRow_DisjointByIdAndDisjoint() throws Exception {
+        createArtistsWithPaintingsAndInfosDataSet();
+
+        List<Artist> artists = ObjectSelect.query(Artist.class)
+                .prefetch(Artist.PAINTING_ARRAY.disjointById())
+                .prefetch(Artist.PAINTING_ARRAY.dot(Painting.TO_PAINTING_INFO).disjoint())
+                .select(context);
+
+        assertEquals(2, artists.size());
+        env.runWithQueriesBlocked(() -> {
+            for (Artist artist : artists) {
+                for (Painting painting : artist.getPaintingArray()) {
+                    assertNotNull(painting.getToPaintingInfo());
+                }
+            }
+        });
+    }
+
+    @Test
+    public void prefetchToMany_DisjointByIdAndDisjoint() throws Exception {
+        createArtistsWithPaintingsAndInfosDataSet();
+
+        List<Painting> paintings = ObjectSelect.query(Painting.class)
+                .prefetch(Painting.TO_ARTIST.disjointById())
+                .prefetch(Painting.TO_ARTIST.dot(Artist.PAINTING_ARRAY).disjoint())
+                .select(context);
+
+        assertEquals(4, paintings.size());
+        env.runWithQueriesBlocked(() -> {
+            for (Painting painting : paintings) {
+                assertEquals(2, painting.getToArtist().getPaintingArray().size());
+            }
+        });
+    }
+
+    @Test
+    public void prefetchFlattenedToMany_DisjointByIdAndDisjoint() throws Exception {
+        createArtistsWithPaintingsAndInfosDataSet();
+
+        List<Painting> paintings = ObjectSelect.query(Painting.class)
+                .prefetch(Painting.TO_ARTIST.disjointById())
+                .prefetch(Painting.TO_ARTIST.dot(Artist.GROUP_ARRAY).disjoint())
+                .select(context);
+
+        assertEquals(4, paintings.size());
+        env.runWithQueriesBlocked(() -> {
+            for (Painting painting : paintings) {
+                Artist artist = painting.getToArtist();
+                int groups = "artist1".equals(artist.getArtistName()) ? 2 : 1;
+                assertEquals(groups, artist.getGroupArray().size());
+            }
+        });
+    }
+
+    @Test
+    public void prefetchToManyAcrossJoint_DisjointByIdJointAndDisjoint() throws Exception {
+        createArtistsWithPaintingsAndInfosDataSet();
+
+        List<PaintingInfo> infos = ObjectSelect.query(PaintingInfo.class)
+                .prefetch(PaintingInfo.PAINTING.disjointById())
+                .prefetch(PaintingInfo.PAINTING.dot(Painting.TO_ARTIST).joint())
+                .prefetch(PaintingInfo.PAINTING.dot(Painting.TO_ARTIST).dot(Artist.PAINTING_ARRAY).disjoint())
+                .select(context);
+
+        assertEquals(4, infos.size());
+        env.runWithQueriesBlocked(() -> {
+            for (PaintingInfo info : infos) {
+                assertEquals(2, info.getPainting().getToArtist().getPaintingArray().size());
+            }
+        });
+    }
+
+    @Test
+    public void newerParentKeepsToMany_DisjointByIdAndDisjoint() throws Exception {
+        createArtistsWithPaintingsAndInfosDataSet();
+
+        // as if a concurrent query had refreshed the artists after every statement of the query below
+        List<Artist> artists = ObjectSelect.query(Artist.class).select(context);
+        for (Artist artist : artists) {
+            artist.setSnapshotVersion(Long.MAX_VALUE);
+        }
+
+        ObjectSelect.query(Painting.class)
+                .prefetch(Painting.TO_ARTIST.disjointById())
+                .prefetch(Painting.TO_ARTIST.dot(Artist.PAINTING_ARRAY).disjoint())
+                .select(context);
+
+        for (Artist artist : artists) {
+            assertTrue(artist.readPropertyDirectly(Artist.PAINTING_ARRAY.getName()) instanceof Fault);
+        }
+    }
+
+    @Test
+    public void newerParentKeepsToOne_DisjointByIdAndDisjoint() throws Exception {
+        createArtistsWithPaintingsAndInfosDataSet();
+
+        // as if a concurrent query had refreshed the paintings after every statement of the query below
+        List<Painting> paintings = ObjectSelect.query(Painting.class).select(context);
+        for (Painting painting : paintings) {
+            painting.setSnapshotVersion(Long.MAX_VALUE);
+        }
+
+        ObjectSelect.query(Artist.class)
+                .prefetch(Artist.PAINTING_ARRAY.disjointById())
+                .prefetch(Artist.PAINTING_ARRAY.dot(Painting.TO_PAINTING_INFO).disjoint())
+                .select(context);
+
+        for (Painting painting : paintings) {
+            assertTrue(painting.readPropertyDirectly(Painting.TO_PAINTING_INFO.getName()) instanceof Fault);
+        }
     }
 }

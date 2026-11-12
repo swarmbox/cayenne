@@ -115,7 +115,7 @@ class PrefetchProcessorNode extends PrefetchTreeNode {
             if (incoming instanceof ToOneProperty) {
                 store().withObjectLock(parent.getObjectId(), () -> {
                     if (parent.getPersistenceState() != PersistenceState.HOLLOW
-                            && version >= parent.getSnapshotVersion()
+                            && !refreshedByNewerStatement(parent, version)
                             && relationshipNotModified(parent, incoming)) {
                         incoming.writePropertyDirectly(parent, null, object);
                     }
@@ -192,7 +192,7 @@ class PrefetchProcessorNode extends PrefetchTreeNode {
 
         for (Persistent object : parentObjects) {
             store().withObjectLock(object.getObjectId(), () -> {
-                if (version >= object.getSnapshotVersion()
+                if (!refreshedByNewerStatement(object, version)
                         && incoming.readPropertyDirectly(object) instanceof Fault) {
                     incoming.writePropertyDirectly(object, null, null);
                 }
@@ -226,7 +226,7 @@ class PrefetchProcessorNode extends PrefetchTreeNode {
         store().withObjectLock(object.getObjectId(), () -> {
             // a HOLLOW parent would need a fetch to get a list to resolve, so it is left to resolve lazily
             if (object.getPersistenceState() != PersistenceState.HOLLOW
-                    && version >= object.getSnapshotVersion()
+                    && !refreshedByNewerStatement(object, version)
                     && relationshipNotModified(object, incoming)) {
                 @SuppressWarnings("unchecked")
                 ToManyHolder<Persistent> toMany = (ToManyHolder<Persistent>) incoming.readProperty(object);
@@ -234,6 +234,23 @@ class PrefetchProcessorNode extends PrefetchTreeNode {
             }
             return null;
         });
+    }
+
+    /**
+     * Returns whether a parent object reflects a newer snapshot than the association read at the given version, so
+     * that writing the association to it would overwrite the result of a newer statement. Called under the parent's
+     * lock.
+     * <p>
+     * A refresh by the statement of this node's parent rows does not count. A disjoint prefetch nested under a
+     * disjoint-by-id one runs with the root query, before the statement that resolves its parent node, so its rows are
+     * older than the parents this same query has just refreshed, yet no less current. The version of the parent rows is
+     * the oldest among them, so a parent refreshed after them by any other statement still counts as newer.
+     */
+    private boolean refreshedByNewerStatement(Persistent parentObject, long version) {
+        long parentVersion = parentObject.getSnapshotVersion();
+        boolean newerThanAssociation = parentVersion > version;
+        boolean newerThanParentRows = parentVersion > ((PrefetchProcessorNode) getParent()).rowsVersion();
+        return newerThanAssociation && newerThanParentRows;
     }
 
     List<DataRow> getDataRows() {
