@@ -38,6 +38,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -156,6 +157,36 @@ public class DataRowStoreIT {
 
             assertEquals(Map.of("ARTIST_NAME", "b"), events.getFirst().getModifiedDiffs().get(key));
             assertEquals(changed.getVersion(), events.getFirst().getVersion());
+        } finally {
+            eventManager.shutdown();
+        }
+    }
+
+    /**
+     * A commit snapshot older than the cached one, i.e. a later read got into the cache first, is dropped and not
+     * broadcast, even with the values its update wrote.
+     */
+    @Test
+    public void newerReadRowWinsOverCommitSnapshot() {
+        DefaultEventManager eventManager = new DefaultEventManager();
+        try {
+            cache = new DataRowStore("cacheXYZ", 10, eventManager);
+            List<SnapshotEvent> events = new ArrayList<>();
+            eventManager.addListener(events, SnapshotEvent.class, List::add, cache.getSnapshotEventSubject());
+
+            ObjectId key = ObjectId.of("Artist", Artist.ARTIST_ID_PK_COLUMN, 1);
+            DataRowLayout layout = DataRowLayout.of("ARTIST_ID", "ARTIST_NAME", "DATE_OF_BIRTH");
+            long commitVersion = SnapshotVersion.next();
+            DataRow read = DataRow.of("Artist", layout, new Object[]{1, "a", "d"}, SnapshotVersion.next());
+            cache.processSnapshotChanges(this, Map.of(key, read), Collections.emptyList(), Collections.emptyList(),
+                    Collections.emptyList());
+
+            DataRow commit = DataRow.of("Artist", layout, new Object[]{1, "b", "d"}, commitVersion);
+            cache.processSnapshotChanges(this, Map.of(key, commit), Collections.emptyList(), Collections.emptyList(),
+                    Collections.emptyList(), Map.of(key, Map.of("ARTIST_NAME", "b")));
+
+            assertSame(read, cache.getCachedSnapshot(key));
+            assertTrue(events.isEmpty());
         } finally {
             eventManager.shutdown();
         }

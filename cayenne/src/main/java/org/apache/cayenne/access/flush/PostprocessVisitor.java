@@ -38,6 +38,7 @@ import org.apache.cayenne.access.flush.operation.DeleteDbRowOp;
 import org.apache.cayenne.access.flush.operation.InsertDbRowOp;
 import org.apache.cayenne.access.flush.operation.UpdateDbRowOp;
 import org.apache.cayenne.exp.DbPathExp;
+import org.apache.cayenne.map.DbAttribute;
 import org.apache.cayenne.reflect.ArcProperty;
 import org.apache.cayenne.reflect.ClassDescriptor;
 import org.apache.cayenne.reflect.ToManyMapProperty;
@@ -51,6 +52,7 @@ class PostprocessVisitor implements DbRowOpVisitor<Void> {
     // one snapshot version for every object of this commit
     private final long version;
     private Map<ObjectId, DataRow> updatedSnapshots;
+    private Map<ObjectId, Map<String, Object>> writtenValues;
     private Collection<ObjectId> deletedIds;
 
     PostprocessVisitor(DataContext context) {
@@ -73,7 +75,8 @@ class PostprocessVisitor implements DbRowOpVisitor<Void> {
             // as the cached row, which another context may have changed since the object was last merged
             context.getObjectStore().mergeNewerCachedSnapshot(dbRow.getObject());
 
-            processObjectChange(dbRow);
+            DataRow dataRow = processObjectChange(dbRow);
+            recordWrittenValues(dbRow, dataRow);
         }
         return null;
     }
@@ -83,7 +86,30 @@ class PostprocessVisitor implements DbRowOpVisitor<Void> {
         return !dbRow.getChangeId().getEntityName().startsWith(DbPathExp.DB_PREFIX);
     }
 
-    private void processObjectChange(DbRowOp dbRow) {
+    /**
+     * Records the values of the snapshot columns the update wrote, which are announced to the peer contexts even if
+     * the row was not cached.
+     */
+    private void recordWrittenValues(UpdateDbRowOp dbRow, DataRow dataRow) {
+        Map<String, Object> written = new HashMap<>();
+        for (DbAttribute attribute : dbRow.getValues().getUpdatedAttributes()) {
+            String column = attribute.getName();
+            if (dataRow.containsKey(column)) {
+                written.put(column, dataRow.get(column));
+            }
+        }
+
+        if (written.isEmpty()) {
+            return;
+        }
+
+        if (writtenValues == null) {
+            writtenValues = new HashMap<>();
+        }
+        writtenValues.put(dbRow.getObject().getObjectId(), written);
+    }
+
+    private DataRow processObjectChange(DbRowOp dbRow) {
         DataRow dataRow = ObjectSnapshots.snapshot(context, dbRow.getObject(), version);
 
         if (dbRow.getObject() != null) {
@@ -113,6 +139,8 @@ class PostprocessVisitor implements DbRowOpVisitor<Void> {
                 }
             }
         }
+
+        return dataRow;
     }
 
     @Override
@@ -133,6 +161,13 @@ class PostprocessVisitor implements DbRowOpVisitor<Void> {
 
     Map<ObjectId, DataRow> getUpdatedSnapshots() {
         return updatedSnapshots == null ? Collections.emptyMap() : updatedSnapshots;
+    }
+
+    /**
+     * Returns the values of the snapshot columns each update wrote, by object id. Inserts are not included.
+     */
+    Map<ObjectId, Map<String, Object>> getWrittenValues() {
+        return writtenValues == null ? Collections.emptyMap() : writtenValues;
     }
 
     private void remapTarget(ToManyMapProperty property, Object resolvedMap, Object target) {

@@ -239,7 +239,8 @@ public class DefaultDataDomainFlushAction implements DataDomainFlushAction {
                         postprocessor.getUpdatedSnapshots(),
                         postprocessor.getDeletedIds(),
                         Collections.emptyList(),
-                        indirectDiffBuilder.getIndirectModifications()
+                        indirectDiffBuilder.getIndirectModifications(),
+                        postprocessor.getWrittenValues()
                 );
         objectStore.postprocessAfterCommit(afterCommitDiff);
     }

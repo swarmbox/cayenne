@@ -89,6 +89,16 @@ public class DataContextSharedCacheCommitIT {
         p2.setPaintingTitle("t1");
         context2.commitChanges();
 
+        // the peer change merges into the modified object, which keeps its own change
+        new ParallelTestContainer() {
+
+            @Override
+            protected void assertResult() {
+                assertEquals("t1", p1.getPaintingTitle());
+            }
+        }.runTest(3000);
+        assertEquals("d1", p1.getPaintingDescription());
+
         context1.commitChanges();
         assertEquals(Map.of(DESCRIPTION, "d1"), lastModifiedDiff(p1.getObjectId()));
         assertCommitted(p1, p2);
@@ -151,6 +161,28 @@ public class DataContextSharedCacheCommitIT {
 
         context1.commitChanges();
         assertCommitted(p1, p2);
+    }
+
+    @Test
+    public void snapshotChangePropagation_EvictedRow() throws Exception {
+        DataContext context1 = context(true);
+        DataContext context2 = context(true);
+
+        Painting p1 = painting(context1);
+        Painting p2 = painting(context2);
+        cache.forgetSnapshot(p1.getObjectId());
+
+        p2.setPaintingTitle("t1");
+        context2.commitChanges();
+        assertEquals(Map.of(TITLE, "t1"), lastModifiedDiff(p1.getObjectId()));
+
+        new ParallelTestContainer() {
+
+            @Override
+            protected void assertResult() {
+                assertEquals("t1", p1.getPaintingTitle());
+            }
+        }.runTest(3000);
     }
 
     private DataContext context(boolean syncWithSnapshotCache) {

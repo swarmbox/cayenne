@@ -72,6 +72,10 @@ public class DataRowStore {
     protected EventManager eventManager;
     protected EventBridge remoteNotificationsHandler;
 
+    // the values the updates of the commit being processed on this thread wrote, by id, while the commit's call of the
+    // five-argument processSnapshotChanges is in progress
+    private final ThreadLocal<Map<ObjectId, Map<String, Object>>> commitWrittenValues = new ThreadLocal<>();
+
     // IMPORTANT: EventSubject must be an ivar to avoid its deallocation
     // too early, and thus disabling events.
     protected EventSubject eventSubject;
@@ -356,6 +360,13 @@ public class DataRowStore {
     /**
      * Processes changes made to snapshots. Modifies internal cache state, and then sends
      * the event to all listeners. Source of these changes is usually an ObjectStore.
+     * <p>
+     * A commit reaches this method through
+     * {@link #processSnapshotChanges(Object, Map, Collection, Collection, Collection, Map)}, which hands it the values
+     * the commit's updates wrote in per-thread state for the duration of the call. This method takes them before
+     * anything else, so any other call, including one made while the commit's event is delivered, runs without them.
+     * A subclass overriding this method therefore sees every commit, and its call of the superclass method processes
+     * the commit with its written values.
      */
     public void processSnapshotChanges(
             Object postedBy,
@@ -363,6 +374,68 @@ public class DataRowStore {
             Collection<ObjectId> deletedSnapshotIds,
             Collection<ObjectId> invalidatedSnapshotIds,
             Collection<ObjectId> indirectlyModifiedIds) {
+
+        Map<ObjectId, Map<String, Object>> writtenValues = takeCommitWrittenValues();
+        applySnapshotChanges(
+                postedBy,
+                updatedSnapshots,
+                deletedSnapshotIds,
+                invalidatedSnapshotIds,
+                indirectlyModifiedIds,
+                writtenValues);
+    }
+
+    /**
+     * Processes changes made to snapshots by a commit. Modifies internal cache state, and then sends the event to all
+     * listeners. The written values are the columns each update of the commit wrote, by id. A snapshot that replaces
+     * a cached one is announced with its differences from that one; one that had no cached predecessor is announced
+     * with its written values, so that the peers holding the object hear of the update even if its row was not
+     * cached. Inserts have no written values, and are not announced.
+     * <p>
+     * The changes are processed by a call of
+     * {@link #processSnapshotChanges(Object, Map, Collection, Collection, Collection)}, which receives the written
+     * values through per-thread state set for the duration of that call only.
+     *
+     * @since 5.0
+     */
+    public void processSnapshotChanges(
+            Object postedBy,
+            Map<ObjectId, DataRow> updatedSnapshots,
+            Collection<ObjectId> deletedSnapshotIds,
+            Collection<ObjectId> invalidatedSnapshotIds,
+            Collection<ObjectId> indirectlyModifiedIds,
+            Map<ObjectId, Map<String, Object>> writtenValues) {
+
+        commitWrittenValues.set(writtenValues);
+        try {
+            processSnapshotChanges(
+                    postedBy,
+                    updatedSnapshots,
+                    deletedSnapshotIds,
+                    invalidatedSnapshotIds,
+                    indirectlyModifiedIds);
+        } finally {
+            commitWrittenValues.remove();
+        }
+    }
+
+    private Map<ObjectId, Map<String, Object>> takeCommitWrittenValues() {
+        Map<ObjectId, Map<String, Object>> writtenValues = commitWrittenValues.get();
+        if (writtenValues == null) {
+            return Collections.emptyMap();
+        }
+
+        commitWrittenValues.remove();
+        return writtenValues;
+    }
+
+    private void applySnapshotChanges(
+            Object postedBy,
+            Map<ObjectId, DataRow> updatedSnapshots,
+            Collection<ObjectId> deletedSnapshotIds,
+            Collection<ObjectId> invalidatedSnapshotIds,
+            Collection<ObjectId> indirectlyModifiedIds,
+            Map<ObjectId, Map<String, Object>> writtenValues) {
 
         // update the internal cache, prepare snapshot event
 
@@ -376,7 +449,7 @@ public class DataRowStore {
 
         processDeletedIDs(deletedSnapshotIds);
         processInvalidatedIDs(invalidatedSnapshotIds);
-        Map<ObjectId, Map<String, Object>> diffs = processUpdatedSnapshots(updatedSnapshots);
+        Map<ObjectId, Map<String, Object>> diffs = processUpdatedSnapshots(updatedSnapshots, writtenValues);
         sendUpdateNotification(
                 postedBy,
                 version(updatedSnapshots),
@@ -416,7 +489,9 @@ public class DataRowStore {
         return version;
     }
 
-    private Map<ObjectId, Map<String, Object>> processUpdatedSnapshots(Map<ObjectId, DataRow> updatedSnapshots) {
+    private Map<ObjectId, Map<String, Object>> processUpdatedSnapshots(
+            Map<ObjectId, DataRow> updatedSnapshots,
+            Map<ObjectId, Map<String, Object>> writtenValues) {
         Map<ObjectId, Map<String, Object>> diffs = null;
 
         // MODIFIED: replace/add snapshots, generate diffs for event
@@ -444,17 +519,18 @@ public class DataRowStore {
                     continue;
                 }
 
-                // generate diff for the updated event, if this not a new snapshot
-                if (replaced[0] != null) {
-                    Map<String, Object> diff = diff(replaced[0], newSnapshot);
+                // a replaced snapshot is announced with what changed in it. Without one, the row was not cached, e.g.
+                // evicted, but peers may still hold the object: an update is announced with the values it wrote
+                Map<String, Object> diff = replaced[0] != null
+                        ? diff(replaced[0], newSnapshot)
+                        : writtenValues.get(key);
 
-                    if (diff != null) {
-                        if (diffs == null) {
-                            diffs = new HashMap<>();
-                        }
-
-                        diffs.put(key, diff);
+                if (diff != null) {
+                    if (diffs == null) {
+                        diffs = new HashMap<>();
                     }
+
+                    diffs.put(key, diff);
                 }
             }
         }
